@@ -1,0 +1,74 @@
+{
+    "squads": [
+        {
+            "squadType": "T20",
+            "isHeader": true
+        },
+        {
+            "squadId": 28537,
+            "squadType": "Gujarat Titans",
+            "imageId": 235085,
+            "teamId": 971
+        },
+        {
+            "squadId": 28544,
+            "squadType": "Chennai Super Kings",
+            "imageId": 225641,
+            "teamId": 58
+        },
+        {
+            "squadId": 28551,
+            "squadType": "Punjab Kings",
+            "imageId": 225648,
+            "teamId": 65
+        },
+        {
+            "squadId": 28558,
+            "squadType": "Kolkata Knight Riders",
+            "imageId": 225646,
+            "teamId": 63
+        },
+        {
+            "squadId": 28565,
+            "squadType": "Lucknow Super Giants",
+            "imageId": 228727,
+            "teamId": 966
+        },
+        {
+            "squadId": 28572,
+            "squadType": "Delhi Capitals",
+            "imageId": 225644,
+            "teamId": 61
+        },
+        {
+            "squadId": 28579,
+            "squadType": "Sunrisers Hyderabad",
+            "imageId": 225649,
+            "teamId": 255
+        },
+        {
+            "squadId": 28586,
+            "squadType": "Rajasthan Royals",
+            "imageId": 225647,
+            "teamId": 64
+        },
+        {
+            "squadId": 28593,
+            "squadType": "Royal Challengers Bangalore",
+            "imageId": 225643,
+            "teamId": 59
+        },
+        {
+            "squadId": 28600,
+            "squadType": "Mumbai Indians",
+            "imageId": 225645,
+            "teamId": 62
+        }
+    ],
+    "appIndex": {
+        "seoTitle": "Squads - Indian Premier League 2023 - Cricbuzz | Cricbuzz.com",
+        "webURL": "www.cricbuzz.com/cricket-series/"
+    },
+    "seriesName": "Indian Premier League 2023",
+    "seriesId": 5945
+}

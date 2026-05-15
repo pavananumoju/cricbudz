@@ -1,0 +1,4 @@
+export const CRICKET_CONFIG = {
+  IPL_SERIES_ID: '9241',
+  IPL_SEASON: '2026',
+};

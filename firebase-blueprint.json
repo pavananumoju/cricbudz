@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "UserSquad": {
+      "title": "UserSquad",
+      "description": "User's fantasy team for a match.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "matchId": { "type": "string" },
+        "players": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mvpId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "matchId", "players", "mvpId", "createdAt"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Cricket match fixture.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "team1": { "type": "string" },
+        "team2": { "type": "string" },
+        "date": { "type": "string" },
+        "venue": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "team1", "team2", "date", "venue", "status"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Cricket player.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "team": { "type": "string" },
+        "role": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" }
+      },
+      "required": ["id", "name", "team", "role", "price"]
+    }
+  },
+  "firestore": {
+    "userSquads/{squadId}": {
+      "schema": "UserSquad",
+      "description": "Collection of drafted fantasy squads."
+    },
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Matches synced from API."
+    },
+    "players/{playerId}": {
+      "schema": "Player",
+      "description": "Master player list."
+    }
+  }
+}
