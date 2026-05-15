@@ -39,12 +39,14 @@ The project is designed to scale toward:
 
 * Next.js App Router API routes
 * RapidAPI (Cricbuzz Cricket API)
+* https://rapidapi.com/cricketapilive/api/cricbuzz-cricket
 
 ## Database & Authentication
 
 * Firebase Firestore
 * Firebase Authentication
 * Firebase Admin SDK (server-side writes)
+* https://console.firebase.google.com/u/0/project/gen-lang-client-0759118211/overview?utm_source=chatgpt.com
 
 ## Hosting (Recommended)
 
