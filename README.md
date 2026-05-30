@@ -64,27 +64,37 @@ cricbudz/
 ├── src/
 │   ├── app/                          # Next.js App Router Core
 │   │   ├── api/
-│   │   │   └── sync/
-│   │   │       └── route.ts         # Server-side ETL pipeline (Matches + Players)
+│   │   │   ├── recommend/            # Gemini AI Suggestion Engine
+│   │   │   └── sync/                 # Server-side ETL pipeline (Matches + Players)
 │   │   │
 │   │   ├── dashboard/
-│   │   │   └── page.tsx             # Active tracking boards & entry portals
+│   │   │   └── page.tsx             # Focused Arena Status & Primary Draft
+│   │   │
+│   │   ├── leaderboard/
+│   │   │   └── page.tsx             # Dynamic global strategist rankings
 │   │   │
 │   │   ├── matches/
 │   │   │   ├── [id]/
 │   │   │   │   ├── _components/
-│   │   │   │   │   ├── PlayerCard.tsx        # High-performance roster item
+│   │   │   │   │   ├── PlayerCard.tsx        # Responsive roster item with stats
+│   │   │   │   │   ├── PlayerRosterPools.tsx  # Categorized team player lists
 │   │   │   │   │   ├── SelectedSlots.tsx     # Trio row state tracker
-│   │   │   │   │   └── SubmissionControl.tsx # Active rule status & lock bar
+│   │   │   │   │   ├── StickySelectionHeader.tsx # Floating match info & back button
+│   │   │   │   │   ├── SubmissionControl.tsx # Active rule status & match locking
+│   │   │   │   │   └── SubmissionSidebar.tsx # Desktop side-panel for squad management
 │   │   │   │   └── page.tsx         # Trio Selection Arena Parent Controller
 │   │   │   └── page.tsx             # Live fixture schedules
 │   │   │
+│   │   ├── rules/
+│   │   │   └── page.tsx             # Official Trio Format guidelines
+│   │   │
 │   │   ├── globals.css              # Typography & customized component tokens
 │   │   ├── layout.tsx               # Base HTML structure & viewport injection
+│   │   ├── loading.tsx              # Global arena entry transitions
 │   │   └── page.tsx                 # Application gateway
 │   │
 │   ├── components/
-│   │   └── Navbar.tsx               # Sticky navigation wrapper
+│   │   └── Navbar.tsx               # Primary navigation abstraction
 │   │
 │   ├── config/
 │   │   └── cricket.ts               # IPL Context Configuration (Series/Year IDs)
@@ -95,14 +105,18 @@ cricbudz/
 │   ├── lib/
 │   │   ├── firebase-admin.ts        # Privileged Server-Side Admin SDK Core
 │   │   ├── firebase.ts              # Client-Side configuration portal
+│   │   ├── gemini.ts                # Google Generative AI utility
 │   │   ├── rapidapi.ts              # Base Axios instances for Cricbuzz routing
 │   │   └── utils.ts                 # Classname mergers (clsx/tailwind-merge)
 │   │
 │   ├── services/
+│   │   ├── cricketApi.ts           # RapidAPI abstraction for fixtures/rosters
 │   │   └── dataService.ts           # Firestore transactional read/write abstractions
 │   │
-│   └── types/
-│       └── index.ts                 # Declarations for Matches, Players, and Squads
+│   ├── types/
+│   │   └── index.ts                 # Declarations for Matches, Players, and Squads
+│   │
+│   └── firebase-applet-config.json  # Environment specific Firebase config
 │
 ├── next.config.ts                  # Remote pattern policies & Next.js engine settings
 ├── package.json                    # Package metadata & script commands
@@ -144,6 +158,11 @@ Future enhancements:
 * Guest mode
 * Profile page
 * Saved fantasy history
+* Trio Draft Arena (Selection & Validation)
+* MVP Tagging System (2x Points)
+* AI-Powered Squad Recommendations (Gemini 1.5 Flash)
+* Dynamic Leaderboards
+* Automatic Draft Locking (30m pre-match)
 
 ---
 
@@ -496,55 +515,30 @@ Display fantasy player pool
 
 Current app does NOT yet support:
 
-* 3-player squad validation rules
-* MVP tagging flow
-* Squad save/edit flow
-* Match scoring system
-* Live points
-* AI player recommendations
-* Player avatars
-* Toss / Playing XI updates
-* Match insights & analytics
+* Match scoring system (Post-match processing)
+* Live points during match
+* Playing XI updates (Toss detection)
+* Push Notifications
+* Player Profile stats/analytics
 ---
 
 # TODO / Future Scope
 
 ## High Priority
 
-### Fantasy Squad Rules
+### Full Scoring Engine
 
-Implement squad validation:
+Implement points calculation:
 
-* Exactly **3 players** must be selected
-* At least **1 player from each team**
-* User must select **1 MVP player**
-* Prevent invalid squad submission
+* Runs, Wickets, Catches, Strike Rate, Economy
+* Double points for selected MVP
 
-### Squad Save
+### Live Commentary & Stats
 
-Allow:
+Show:
 
-* Save selected 3-player squad
-* Edit saved squad
-* Replace players before match starts
-* Store selected MVP
-
-### Player Images
-
-Generate image URL using:
-
-```txt
-https://www.cricbuzz.com/a/img/v1/152x152/i1/{imageId}.webp
-```
-
-### AI Recommendation Engine
-
-Potential features:
-
-* Recommend best 3-player squad
-* Suggest strongest MVP pick
-* Risk-balanced recommendations
-* Recommendations based on player form and match context
+* Live ball-by-ball commentary (Server-side polling)
+* Live scoreboard on match pages
 
 ---
 
@@ -660,15 +654,21 @@ git checkout -b feature/new-feature
 
 ✅ Firestore player sync working
 
-✅ Match cards working
+✅ Match cards & Selection Arena working
 
-✅ Match player loading working
+✅ Trio Draft Validation (3 players, multiside)
 
-🚧 Fantasy rules pending
+✅ MVP Tagging & Squad Persistence
 
-🚧 AI team generation pending
+✅ Gemini AI Recommendations integration
 
-🚧 Scoring engine pending
+✅ Global Leaderboards UI
+
+✅ Match Auto-Lock mechanism (30m pre-toss)
+
+🚧 Scoring engine & live points pending
+
+🚧 Toss/XI detection pending
 
 # Technical Debt / Optimization TODO
 
@@ -680,3 +680,9 @@ Current warnings from ESLint:
 
 ```bash
 @next/next/no-img-element
+```
+
+## 2. Edge-Case Validation
+
+* Better handling for postponed/abandoned matches
+* Loading skeletons for leaderboard data expansion
