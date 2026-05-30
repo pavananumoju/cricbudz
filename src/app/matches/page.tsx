@@ -109,84 +109,120 @@ export default function MatchesPage() {
             <span className="text-blue-500">Battlegrounds</span>
           </h1>
           <p className="text-xl text-gray-400 font-medium max-w-xl">
-            Select a match to start your draft. Every squad requires 11 players within the salary cap.
+            Select a match to start your draft. Pick a match and build your 3-player squad. Choose one MVP to lead your lineup.
           </p>
         </div>
 
-        <div className="max-w-6xl mx-auto">
-          <div className="grid gap-8">
-            <AnimatePresence mode="popLayout">
-              {matches.map((match, idx) => (
-                <motion.div
-                  key={match.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                >
-                  <Link 
-                    href={`/matches/${match.id}`}
-                    className="group block relative overflow-hidden rounded-[48px] bg-white/2 border border-white/5 hover:bg-white/5 transition-all p-1"
+        <div className="max-w-5xl mx-auto">
+  <div className="grid gap-4">
+    <AnimatePresence mode="popLayout">
+      {matches.map((match, idx) => (
+        <motion.div
+          key={match.id}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: idx * 0.04 }}
+        >
+          <Link
+            href={`/matches/${match.id}`}
+            className="group block rounded-3xl bg-white/[0.03] border border-white/10 hover:border-blue-500/30 hover:bg-white/[0.05] transition-all overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-4">
+              {/* Teams */}
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                {/* Team 1 */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black shadow-lg shrink-0"
+                    style={{
+                      backgroundColor: getTeamColor(match.team1),
+                      color: '#fff',
+                    }}
                   >
-                    <div className="flex flex-col md:flex-row items-center justify-between p-10 md:p-14 relative z-10 transition-transform group-hover:scale-[0.995]">
-                      {/* Left Team */}
-                      <div className="flex-1 text-center md:text-left space-y-2">
-                        <div 
-                          className="w-24 h-24 rounded-[32px] mx-auto md:mx-0 flex items-center justify-center text-4xl font-display font-black italic shadow-2xl relative"
-                          style={{ backgroundColor: getTeamColor(match.team1), color: '#fff' }}
-                        >
-                          <div className="absolute inset-0 bg-white/10 rounded-[32px]" />
-                          {match.team1[0]}
-                        </div>
-                        <h2 className="text-4xl font-display font-black uppercase tracking-tight italic">{match.team1}</h2>
-                      </div>
+                    {match.team1[0]}
+                  </div>
 
-                      {/* VS Section */}
-                      <div className="flex flex-col items-center justify-center gap-4 px-10 py-10 md:py-0">
-                         <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center font-display font-black italic text-xl group-hover:rotate-12 transition-transform">VS</div>
-                         <div className="h-px w-20 bg-gradient-to-r from-transparent via-white/20 to-transparent hidden md:block" />
-                      </div>
+                  <span className="font-black text-base md:text-lg truncate">
+                    {match.team1}
+                  </span>
+                </div>
 
-                      {/* Right Team */}
-                      <div className="flex-1 text-center md:text-right space-y-2">
-                        <div 
-                          className="w-24 h-24 rounded-[32px] mx-auto md:mr-0 flex items-center justify-center text-4xl font-display font-black italic shadow-2xl relative"
-                          style={{ backgroundColor: getTeamColor(match.team2), color: '#fff' }}
-                        >
-                          <div className="absolute inset-0 bg-white/10 rounded-[32px]" />
-                          {match.team2[0]}
-                        </div>
-                        <h2 className="text-4xl font-display font-black uppercase tracking-tight italic">{match.team2}</h2>
-                      </div>
-                    </div>
+                {/* VS */}
+                <div className="text-xs font-black text-gray-500 shrink-0 px-1">
+                  VS
+                </div>
 
-                    {/* Bottom Info Bar */}
-                    <div className="bg-black/40 backdrop-blur-md px-10 py-6 flex flex-col md:flex-row items-center justify-between border-t border-white/5 gap-4">
-                       <div className="flex items-center gap-6">
-                          <div className="flex items-center gap-2 text-gray-500 font-mono text-[11px] uppercase font-black">
-                            <Calendar size={14} className="text-blue-500" />
-                            {new Date(match.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-500 font-mono text-[11px] uppercase font-black">
-                            <MapPin size={14} className="text-blue-500" />
-                            {match.venue}
-                          </div>
-                       </div>
-                       <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] uppercase font-black tracking-widest">
-                            <TrendingUp size={12} />
-                            Available Players: 22
-                          </div>
-                          <div className="bg-white text-black px-6 py-2 rounded-full font-display font-black text-xs uppercase tracking-tight flex items-center gap-2">
-                            Enter Arena <ChevronRight size={14} />
-                          </div>
-                       </div>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
+                {/* Team 2 */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black shadow-lg shrink-0"
+                    style={{
+                      backgroundColor: getTeamColor(match.team2),
+                      color: '#fff',
+                    }}
+                  >
+                    {match.team2[0]}
+                  </div>
+
+                  <span className="font-black text-base md:text-lg truncate">
+                    {match.team2}
+                  </span>
+                </div>
+              </div>
+
+              {/* Match Info */}
+              <div className="hidden md:flex items-center gap-5 text-xs text-gray-400 font-medium shrink-0">
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} className="text-blue-500" />
+                  {new Date(match.date).toLocaleDateString(
+                    'en-US',
+                    {
+                      day: 'numeric',
+                      month: 'short',
+                    }
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 max-w-[180px] truncate">
+                  <MapPin size={14} className="text-blue-500 shrink-0" />
+                  <span className="truncate">
+                    {match.venue}
+                  </span>
+                </div>
+
+                <ChevronRight
+                  size={18}
+                  className="text-gray-500 group-hover:translate-x-1 transition-transform"
+                />
+              </div>
+            </div>
+
+            {/* Mobile Info Row */}
+            <div className="md:hidden border-t border-white/5 px-5 py-2 flex items-center justify-between text-[11px] text-gray-500">
+              <div className="flex items-center gap-1">
+                <Calendar size={12} />
+                {new Date(match.date).toLocaleDateString(
+                  'en-US',
+                  {
+                    day: 'numeric',
+                    month: 'short',
+                  }
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 truncate ml-3">
+                <MapPin size={12} />
+                <span className="truncate">
+                  {match.venue}
+                </span>
+              </div>
+            </div>
+          </Link>
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  </div>
+</div>
       </main>
     </div>
   );

@@ -10,36 +10,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-
-export interface Player {
-  id: string;
-  name: string;
-  team: string;
-  teamId?: number;
-  role: string;
-  price: number;
-  imageId?: number;
-  battingStyle?: string;
-  bowlingStyle?: string;
-}
-
-export interface Match {
-  id: string;
-  team1: string;
-  team2: string;
-  date: string;
-  venue: string;
-  status: string;
-}
-
-export interface UserSquad {
-  id?: string;
-  userId: string;
-  matchId: string;
-  players: string[];
-  mvpId: string;
-  createdAt: number;
-}
+import { Player, Match, UserSquad } from '@/types';
 
 export async function getMatches(): Promise<Match[]> {
   try {
@@ -118,12 +89,36 @@ export async function getPlayersByTeams(
     ]);
 
     const players = [
-      ...s1.docs.map(
-        d => d.data() as Player
-      ),
-      ...s2.docs.map(
-        d => d.data() as Player
-      ),
+      ...s1.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || '',
+          team: data.team || '',
+          teamId: data.teamId,
+          role: data.role || '',
+          price: data.price || 0,
+          imageId: data.imageId,
+          battingStyle: data.battingStyle,
+          bowlingStyle: data.bowlingStyle,
+          points: data.points
+        } as Player;
+      }),
+      ...s2.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || '',
+          team: data.team || '',
+          teamId: data.teamId,
+          role: data.role || '',
+          price: data.price || 0,
+          imageId: data.imageId,
+          battingStyle: data.battingStyle,
+          bowlingStyle: data.bowlingStyle,
+          points: data.points
+        } as Player;
+      }),
     ];
 
     console.log(
@@ -141,7 +136,7 @@ export async function getPlayersByTeams(
   }
 }
 
-export async function saveUserSquad(squad: UserSquad) {
+export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt'>) {
   const userId = auth.currentUser?.uid;
   if (!userId) throw new Error('User not authenticated');
   

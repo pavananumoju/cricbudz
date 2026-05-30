@@ -17,12 +17,12 @@ CricBudz is a fantasy cricket platform focused on the Indian Premier League (IPL
 
 The project is designed to scale toward:
 
-* Fantasy team creation
-* Credits system
-* Captain / Vice-Captain selection
-* AI-generated fantasy teams
-* Scoring engine
-* Match analytics
+* 3-player fantasy squad creation
+* MVP player tagging
+* AI-assisted player recommendations
+* Match analytics and insights
+* Fantasy scoring engine
+* Live match intelligence
 
 ---
 
@@ -58,26 +58,55 @@ The project is designed to scale toward:
 # Project Structure
 
 ```txt
-src/
-├── app/
-│   ├── api/
-│   │   └── sync/
-│   │       └── route.ts
-│   ├── dashboard/
-│   └── ...
+# Project Structure
+cricbudz/
 │
-├── config/
-│   └── cricket.ts
+├── src/
+│   ├── app/                          # Next.js App Router Core
+│   │   ├── api/
+│   │   │   └── sync/
+│   │   │       └── route.ts         # Server-side ETL pipeline (Matches + Players)
+│   │   │
+│   │   ├── dashboard/
+│   │   │   └── page.tsx             # Active tracking boards & entry portals
+│   │   │
+│   │   ├── matches/
+│   │   │   ├── [id]/
+│   │   │   │   ├── _components/
+│   │   │   │   │   ├── PlayerCard.tsx        # High-performance roster item
+│   │   │   │   │   ├── SelectedSlots.tsx     # Trio row state tracker
+│   │   │   │   │   └── SubmissionControl.tsx # Active rule status & lock bar
+│   │   │   │   └── page.tsx         # Trio Selection Arena Parent Controller
+│   │   │   └── page.tsx             # Live fixture schedules
+│   │   │
+│   │   ├── globals.css              # Typography & customized component tokens
+│   │   ├── layout.tsx               # Base HTML structure & viewport injection
+│   │   └── page.tsx                 # Application gateway
+│   │
+│   ├── components/
+│   │   └── Navbar.tsx               # Sticky navigation wrapper
+│   │
+│   ├── config/
+│   │   └── cricket.ts               # IPL Context Configuration (Series/Year IDs)
+│   │
+│   ├── context/
+│   │   └── AuthContext.tsx          # React Session state broadcast layer
+│   │
+│   ├── lib/
+│   │   ├── firebase-admin.ts        # Privileged Server-Side Admin SDK Core
+│   │   ├── firebase.ts              # Client-Side configuration portal
+│   │   ├── rapidapi.ts              # Base Axios instances for Cricbuzz routing
+│   │   └── utils.ts                 # Classname mergers (clsx/tailwind-merge)
+│   │
+│   ├── services/
+│   │   └── dataService.ts           # Firestore transactional read/write abstractions
+│   │
+│   └── types/
+│       └── index.ts                 # Declarations for Matches, Players, and Squads
 │
-├── lib/
-│   ├── firebase.ts
-│   ├── firebase-admin.ts
-│   └── rapidapi.ts
-│
-├── services/
-│   └── dataService.ts
-│
-└── components/
+├── next.config.ts                  # Remote pattern policies & Next.js engine settings
+├── package.json                    # Package metadata & script commands
+└── README.md                       # Documentation hub
 ```
 
 ---
@@ -467,46 +496,38 @@ Display fantasy player pool
 
 Current app does NOT yet support:
 
-* Fantasy team validation
-* Credits limit
-* Max players from one team
-* Captain/Vice Captain
-* Match scoring
+* 3-player squad validation rules
+* MVP tagging flow
+* Squad save/edit flow
+* Match scoring system
 * Live points
-* Leaderboards
-* AI team recommendation
+* AI player recommendations
 * Player avatars
 * Toss / Playing XI updates
-
+* Match insights & analytics
 ---
 
 # TODO / Future Scope
 
 ## High Priority
 
-### Fantasy Rules Engine
+### Fantasy Squad Rules
 
-Add validation:
+Implement squad validation:
 
-* 11 players required
-* Max 7 players per team
-* Credits cap
-* Mandatory role combinations
-
-### Captain & Vice-Captain
-
-Support:
-
-* Captain → 2x points
-* Vice Captain → 1.5x points
+* Exactly **3 players** must be selected
+* At least **1 player from each team**
+* User must select **1 MVP player**
+* Prevent invalid squad submission
 
 ### Squad Save
 
 Allow:
 
-* Edit squad
-* Replace players
-* Multiple squads
+* Save selected 3-player squad
+* Edit saved squad
+* Replace players before match starts
+* Store selected MVP
 
 ### Player Images
 
@@ -516,14 +537,14 @@ Generate image URL using:
 https://www.cricbuzz.com/a/img/v1/152x152/i1/{imageId}.webp
 ```
 
-### AI Team Builder
+### AI Recommendation Engine
 
 Potential features:
 
-* Safe team
-* High-risk/high-reward team
-* Grand league strategy
-* Based on player form
+* Recommend best 3-player squad
+* Suggest strongest MVP pick
+* Risk-balanced recommendations
+* Recommendations based on player form and match context
 
 ---
 
@@ -564,13 +585,18 @@ Calculate fantasy points.
 
 Compete across users.
 
-### Wallet / Contest System
+### Match Intelligence
 
-Entry fee contests.
+Provide:
 
-### Multi-League Support
+* Venue insights
+* Team form analysis
+* Player trends
+* Head-to-head insights
 
-Support:
+### Multi-Tournament Support
+
+Potential future support:
 
 * IPL
 * Champions Trophy
@@ -643,3 +669,14 @@ git checkout -b feature/new-feature
 🚧 AI team generation pending
 
 🚧 Scoring engine pending
+
+# Technical Debt / Optimization TODO
+
+These are known improvements that are not urgent for MVP but recommended later.
+
+## 1. Replace `<img>` with `next/image`
+
+Current warnings from ESLint:
+
+```bash
+@next/next/no-img-element

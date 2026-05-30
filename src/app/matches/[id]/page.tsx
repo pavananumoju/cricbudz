@@ -1,36 +1,52 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { getMatchById, getPlayersByTeams, Match, Player, saveUserSquad } from '@/services/dataService';
 import { useRouter } from 'next/navigation';
-import { 
-  Trophy, 
-  ArrowLeft, 
-  Plus, 
-  Check, 
-  Users, 
-  ShieldAlert,
-  Zap,
-  DollarSign,
-  ChevronRight,
-  Info
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { motion } from 'motion/react';
+import { getMatchById, getPlayersByTeams, saveUserSquad } from '@/services/dataService';
+import { Player, Match } from '@/types';
 import { cn } from '@/lib/utils';
-import Image from 'next/image';
 
-const SALARY_CAP = 100;
-const TEAM_SIZE = 11;
+// Component Imports
+import PlayerCard from './_components/PlayerCard';
+import SelectedSlots from './_components/SelectedSlots';
+import SubmissionControl from './_components/SubmissionControl';
+
+const SQUAD_TARGET_SIZE = 3;
+
+const TEAM_BRANDS: Record<string, { imageId: string; textClass: string; bgClass: string; borderClass: string }> = {
+  MI: { imageId: 'mi', textClass: 'text-blue-400', bgClass: 'bg-blue-500/10', borderClass: 'border-blue-500/30' },
+  CSK: { imageId: 'csk', textClass: 'text-amber-400', bgClass: 'bg-amber-500/10', borderClass: 'border-amber-500/30' },
+  RCB: { imageId: 'rcb', textClass: 'text-red-400', bgClass: 'bg-red-500/10', borderClass: 'border-red-500/30' },
+  SRH: { imageId: 'srh', textClass: 'text-orange-400', bgClass: 'bg-orange-500/10', borderClass: 'border-orange-500/30' },
+  DC: { imageId: 'dc', textClass: 'text-blue-400', bgClass: 'bg-blue-500/10', borderClass: 'border-blue-500/30' },
+  KKR: { imageId: 'kkr', textClass: 'text-purple-400', bgClass: 'bg-purple-500/10', borderClass: 'border-purple-500/30' },
+  PBKS: { imageId: 'pbks', textClass: 'text-red-400', bgClass: 'bg-red-500/10', borderClass: 'border-red-500/30' },
+  RR: { imageId: 'rr', textClass: 'text-pink-400', bgClass: 'bg-pink-500/10', borderClass: 'border-pink-500/30' },
+  LSG: { imageId: 'lsg', textClass: 'text-cyan-400', bgClass: 'bg-cyan-500/10', borderClass: 'border-cyan-500/30' },
+  GT: { imageId: 'gt', textClass: 'text-yellow-500', bgClass: 'bg-yellow-500/10', borderClass: 'border-yellow-500/30' },
+};
+
+function getTeamBrand(teamShortName: string) {
+  return TEAM_BRANDS[teamShortName.toUpperCase()] || { 
+    imageId: '152655', 
+    textClass: 'text-blue-400', 
+    bgClass: 'bg-blue-500/10', 
+    borderClass: 'border-blue-500/30' 
+  };
+}
 
 export default function SquadDraftPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [match, setMatch] = useState<Match | null>(null);
-  const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
+  const [team1Players, setTeam1Players] = useState<Player[]>([]);
+  const [team2Players, setTeam2Players] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [mvpId, setMvpId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState('All');
+  const [uiFeedback, setUiFeedback] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -39,85 +55,74 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       if (matchData) {
         setMatch(matchData);
         const players = await getPlayersByTeams(matchData.team1, matchData.team2);
-        setAvailablePlayers(players);
+        setTeam1Players(players.filter(p => p.team.toUpperCase() === matchData.team1.toUpperCase()));
+        setTeam2Players(players.filter(p => p.team.toUpperCase() === matchData.team2.toUpperCase()));
       }
       setLoading(false);
     };
     fetchData();
   }, [id]);
 
-  const togglePlayer = (player: Player) => {
+  const selectPlayer = (player: Player) => {
+    setUiFeedback(null);
     if (selectedPlayers.find(p => p.id === player.id)) {
-      setSelectedPlayers(selectedPlayers.filter(p => p.id !== player.id));
-      if (mvpId === player.id) setMvpId(null);
-    } else {
-      if (selectedPlayers.length < TEAM_SIZE) {
-        const totalCost = selectedPlayers.reduce((sum, p) => sum + p.price, 0) + player.price;
-        if (totalCost <= SALARY_CAP) {
-          setSelectedPlayers([...selectedPlayers, player]);
-        } else {
-          alert('Salary cap exceeded!');
-        }
+      removePlayer(player.id);
+      return;
+    }
+    if (selectedPlayers.length >= SQUAD_TARGET_SIZE) {
+      setUiFeedback({ type: 'error', message: 'Trio slots are full. Remove a player first.' });
+      return;
+    }
+    if (selectedPlayers.length === SQUAD_TARGET_SIZE - 1) {
+      const currentTeams = selectedPlayers.map(p => p.team.toUpperCase());
+      if (currentTeams[0] === currentTeams[1] && currentTeams[0] === player.team.toUpperCase()) {
+        setUiFeedback({ 
+          type: 'error', 
+          message: `Selection Blocked! You must add a player from ${player.team.toUpperCase() === match?.team1.toUpperCase() ? match?.team2 : match?.team1} to meet the dual-franchise rule.` 
+        });
+        return;
       }
     }
+    setSelectedPlayers([...selectedPlayers, player]);
   };
 
-  const currentSalary = selectedPlayers.reduce((sum, p) => sum + p.price, 0);
-  const remainingSalary = SALARY_CAP - currentSalary;
+  const removePlayer = (id: string) => {
+    setSelectedPlayers(selectedPlayers.filter(p => p.id !== id));
+    if (mvpId === id) setMvpId(null);
+    setUiFeedback(null);
+  };
+
+  const checkStatusDetails = (): { canSubmit: boolean; message: string } => {
+    if (selectedPlayers.length < SQUAD_TARGET_SIZE) {
+      return { canSubmit: false, message: `Add ${SQUAD_TARGET_SIZE - selectedPlayers.length} more player(s) to complete your trio.` };
+    }
+    if (new Set(selectedPlayers.map(p => p.team.toUpperCase())).size < 2) {
+      return { canSubmit: false, message: 'Invalid selection rule. Your trio must include at least 1 player from each franchise.' };
+    }
+    if (!mvpId) {
+      return { canSubmit: false, message: 'Nominate your Trio MVP by highlighting the lightning bolt icon on your selections.' };
+    }
+    return { canSubmit: true, message: 'Your Trio Draft looks solid! Ready to deploy to the live tracking boards.' };
+  };
 
   const handleSave = async () => {
-    if (selectedPlayers.length !== TEAM_SIZE) return;
-    if (!mvpId) return;
-    
+    const status = checkStatusDetails();
+    if (!status.canSubmit) return;
     setSaving(true);
     try {
       await saveUserSquad({
         matchId: id,
-        userId: '', // Set by dataService
         players: selectedPlayers.map(p => p.id),
-        mvpId: mvpId,
+        mvpId: mvpId!,
         createdAt: Date.now()
       });
       router.push('/dashboard');
     } catch (error) {
       console.error(error);
-      alert('Failed to save squad');
+      setUiFeedback({ type: 'error', message: 'Network write timeout: Failed to lock choices into Firestore.' });
     } finally {
       setSaving(false);
     }
-  };
-
-  const getTeamColor = (team: string) => {
-    const colors: Record<string, string> = {
-      CSK: '#fdb913',
-      RCB: '#d11d26',
-      MI: '#004ba0',
-      KKR: '#3a225d',
-      GT: '#1b2133',
-      RR: '#ea1a85',
-      SRH: '#f26522',
-      LSG: '#1c1c1c',
-      DC: '#000080',
-      PBKS: '#ed1b24',
-      IND: '#004ba0',
-      AUS: '#ffcd00',
-      ENG: '#ce1126',
-      PAK: '#01411c',
-      SA: '#007a4d',
-      NZ: '#000000',
-      SL: '#000080',
-      AFG: '#0052ff',
-      BAN: '#006a4e',
-      WI: '#7b0041',
-    };
-    
-    if (colors[team]) return colors[team];
-    let hash = 0;
-    for (let i = 0; i < team.length; i++) {
-        hash = team.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    return '#' + '00000'.substring(0, 6 - c.length) + c;
   };
 
   if (loading || !match) {
@@ -128,208 +133,114 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const filteredPlayers = filter === 'All' 
-    ? availablePlayers 
-    : availablePlayers.filter(p => {
-        const role = p.role.toLowerCase();
-        const f = filter.toLowerCase();
-        if (f === 'batsman') return role.includes('bat') || role.includes('wk');
-        if (f === 'bowler') return role.includes('bowl');
-        if (f === 'all-rounder') return role.includes('all');
-        if (f === 'wicketkeeper') return role.includes('wk') || role.includes('keeper');
-        return role.includes(f);
-    });
+  const { canSubmit, message: statusMessage } = checkStatusDetails();
+  const team1Brand = getTeamBrand(match.team1);
+  const team2Brand = getTeamBrand(match.team2);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0b] text-white font-sans overflow-x-hidden">
-      <div className="fixed top-0 left-0 w-full h-[40vh] bg-gradient-to-b from-blue-600/20 to-transparent pointer-events-none -z-10" />
+    <div className="min-h-screen bg-[#0a0a0b] text-white font-sans pb-16 selection:bg-blue-500/30">
+      
+      {/* HEADER HERO AREA */}
+      <div className="container mx-auto px-4 pt-8 pb-4 max-w-7xl">
+        <div className="flex items-center justify-between gap-4 relative">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.back()} className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-all">
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h2 className="font-display font-black text-xl uppercase italic tracking-tighter leading-none">
+                <span className={team1Brand.textClass}>{match.team1}</span> <span className="text-gray-600">vs</span> <span className={team2Brand.textClass}>{match.team2}</span>
+              </h2>
+              <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase mt-0.5">Trio Selection Arena</p>
+            </div>
+          </div>
 
-      <nav className="container mx-auto px-6 py-8 flex items-center justify-between">
-        <button onClick={() => router.back()} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-all group">
-          <ArrowLeft className="group-hover:-translate-x-1 transition-transform" />
-        </button>
-        <div className="flex flex-col items-center">
-           <h2 className="font-display font-black text-2xl uppercase italic tracking-tighter leading-none">
-             {match.team1} <span className="text-blue-500">vs</span> {match.team2}
-           </h2>
-           <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Arena Draft Mode</span>
-        </div>
-        <div className="flex items-center gap-4">
-           <div className="hidden md:flex flex-col items-end">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Rem. Salary</span>
-              <span className="text-xl font-display font-black text-blue-500 italic">${remainingSalary.toFixed(1)}</span>
-           </div>
-           <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center rotate-3 border-2 border-white/20">
-             <Trophy size={20} />
-           </div>
-        </div>
-      </nav>
+          {uiFeedback && (
+            <motion.div 
+              initial={{ opacity: 0, y: -5 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              className="absolute left-1/2 -translate-x-1/2 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl text-xs text-red-400 font-semibold shadow-lg shadow-black/20 z-30"
+            >
+              {uiFeedback.message}
+            </motion.div>
+          )}
 
-      <main className="container mx-auto px-6 py-10">
-        <div className="grid grid-cols-12 gap-10">
-          {/* Player Selection */}
-          <div className="col-span-12 lg:col-span-8 space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex gap-2 bg-white/2 p-2 rounded-[24px] border border-white/5 overflow-x-auto no-scrollbar">
-                {['All', 'Batsman', 'Bowler', 'All-rounder', 'Wicketkeeper'].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={cn(
-                      "px-6 py-3 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                      filter === f ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-white/5"
-                    )}
-                  >
-                    {f}
-                  </button>
+          <div className="text-right">
+            <span className="text-xs font-mono font-black text-gray-500 uppercase tracking-widest">Draft Progress</span>
+            <p className="text-sm font-display font-black text-blue-400 italic">{selectedPlayers.length} / 3 Picked</p>
+          </div>
+        </div>
+
+        {/* Selected Draft Multi-Row Slots Wrapper */}
+        <SelectedSlots 
+          selectedPlayers={selectedPlayers}
+          mvpId={mvpId}
+          onRemove={removePlayer}
+          onSetMvp={setMvpId}
+          getTeamBrand={getTeamBrand}
+        />
+      </div>
+
+      {/* LOWER PLAYGROUND ROSTER GRIDS */}
+      <main className="container mx-auto px-4 py-4 max-w-7xl">
+        <div className="grid grid-cols-12 gap-8">
+          
+          <div className="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Team 1 Column */}
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-[#0a0a0b]/80 border border-white/5 flex items-center justify-between sticky top-[10px] z-20 backdrop-blur-sm">
+                <h3 className={cn("font-display font-black text-lg uppercase tracking-tight italic", team1Brand.textClass)}>
+                  {match.team1} Pool
+                </h3>
+                <span className="text-[10px] font-mono font-black opacity-40">{team1Players.length} Available</span>
+              </div>
+              <div className="space-y-3">
+                {team1Players.map((player) => (
+                  <PlayerCard 
+                    key={player.id}
+                    player={player}
+                    brand={team1Brand}
+                    isSelected={!!selectedPlayers.find(p => p.id === player.id)}
+                    onSelect={() => selectPlayer(player)}
+                  />
                 ))}
               </div>
-              <div className="flex gap-4">
-                <div className="px-6 py-3 rounded-[24px] bg-white/2 border border-white/5 flex items-center gap-3">
-                  <Users size={16} className="text-blue-500" />
-                  <span className="font-display font-black text-lg italic">{selectedPlayers.length} / {TEAM_SIZE}</span>
-                </div>
+            </div>
+
+            {/* Team 2 Column */}
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-[#0a0a0b]/80 border border-white/5 flex items-center justify-between sticky top-[10px] z-20 backdrop-blur-sm">
+                <h3 className={cn("font-display font-black text-lg uppercase tracking-tight italic", team2Brand.textClass)}>
+                  {match.team2} Pool
+                </h3>
+                <span className="text-[10px] font-mono font-black opacity-40">{team2Players.length} Available</span>
+              </div>
+              <div className="space-y-3">
+                {team2Players.map((player) => (
+                  <PlayerCard 
+                    key={player.id}
+                    player={player}
+                    brand={team2Brand}
+                    isSelected={!!selectedPlayers.find(p => p.id === player.id)}
+                    onSelect={() => selectPlayer(player)}
+                  />
+                ))}
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <AnimatePresence mode="popLayout">
-                {filteredPlayers.map((player) => {
-                  const isSelected = selectedPlayers.find(p => p.id === player.id);
-                  return (
-                    <motion.button
-                      layout
-                      key={player.id}
-                      onClick={() => togglePlayer(player)}
-                      className={cn(
-                        "group relative flex items-center gap-4 p-4 rounded-[28px] border transition-all text-left",
-                        isSelected 
-                          ? "bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20" 
-                          : "bg-white/2 border-white/5 hover:bg-white/5"
-                      )}
-                    >
-                      <div className="w-16 h-16 rounded-2xl bg-black/40 border border-white/10 overflow-hidden relative flex-shrink-0">
-                         {player.image ? (
-                           <Image src={player.image} alt={player.name} fill className="object-cover" referrerPolicy="no-referrer" />
-                         ) : (
-                           <div className="w-full h-full flex items-center justify-center font-display font-black text-xl opacity-20">{player.name[0]}</div>
-                         )}
-                         <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center text-[8px] font-black" style={{ color: getTeamColor(player.team) }}>
-                           {player.team[0]}
-                         </div>
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                         <h4 className="font-display font-black text-lg uppercase tracking-tight italic truncate">{player.name}</h4>
-                         <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">{player.role}</p>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="font-display font-black text-lg italic text-blue-400 group-hover:text-white transition-colors">${player.price.toFixed(1)}</span>
-                        {isSelected ? (
-                          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                            <Check size={14} className="text-blue-600" />
-                          </div>
-                        ) : (
-                          <div className="w-6 h-6 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-all">
-                            <Plus size={14} className="text-gray-500 group-hover:text-blue-500" />
-                          </div>
-                        )}
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
           </div>
 
-          {/* Squad Summary / MVP Selection */}
-          <div className="col-span-12 lg:col-span-4 space-y-8">
-             <div className={cn(
-               "p-10 rounded-[48px] border transition-all sticky top-10",
-               selectedPlayers.length === TEAM_SIZE ? "bg-emerald-600 border-emerald-500" : "bg-white/2 border-white/5"
-             )}>
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display font-black text-3xl uppercase tracking-tight italic">Draft Status</h3>
-                    {selectedPlayers.length === TEAM_SIZE && <Zap className="text-white fill-current" />}
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                       <span className="font-mono text-[9px] font-black text-white/50 uppercase tracking-[0.2em]">Capacity</span>
-                       <span className="font-display font-black text-2xl italic">{selectedPlayers.length} / {TEAM_SIZE}</span>
-                    </div>
-                    <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                       <span className="font-mono text-[9px] font-black text-white/50 uppercase tracking-[0.2em]">Salary Cost</span>
-                       <span className="font-display font-black text-2xl italic">${currentSalary.toFixed(1)}</span>
-                    </div>
-                  </div>
-
-                  {selectedPlayers.length === TEAM_SIZE && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="space-y-6 pt-4"
-                    >
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-white/60 uppercase tracking-widest flex items-center gap-2">
-                          <Trophy size={12} className="text-yellow-400" />
-                          Appoint Arena Captain (2x Points)
-                        </label>
-                        <select 
-                          value={mvpId || ''} 
-                          onChange={(e) => setMvpId(e.target.value)}
-                          className="w-full bg-black/40 border border-white/20 rounded-[20px] px-6 py-4 font-display font-black uppercase text-sm italic outline-none focus:border-white transition-all appearance-none cursor-pointer"
-                        >
-                          <option value="" disabled>Select MVP</option>
-                          {selectedPlayers.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <button 
-                        onClick={handleSave}
-                        disabled={saving || !mvpId}
-                        className="w-full bg-white text-black py-6 rounded-[28px] font-display font-black text-lg uppercase tracking-tight transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 group"
-                      >
-                        {saving ? (
-                          <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            Finalize Squad
-                            <ChevronRight className="group-hover:translate-x-1 transition-transform" />
-                          </>
-                        )}
-                      </button>
-                    </motion.div>
-                  )}
-
-                  {selectedPlayers.length < TEAM_SIZE && (
-                    <div className="pt-6 flex items-start gap-3 opacity-50 px-2">
-                      <ShieldAlert size={20} className="flex-shrink-0" />
-                      <p className="text-[11px] font-medium leading-relaxed italic">
-                        Select {TEAM_SIZE - selectedPlayers.length} more players to finalize your squad for this match.
-                      </p>
-                    </div>
-                  )}
-                </div>
-             </div>
-
-             {/* Tips Section */}
-             <div className="p-10 rounded-[48px] bg-white/2 border border-white/5 space-y-6">
-                <h4 className="font-display font-black text-xl uppercase tracking-tight italic flex items-center gap-2">
-                  <Info size={16} className="text-blue-500" />
-                  Arena Tips
-                </h4>
-                <div className="space-y-4 text-xs font-medium text-gray-500 leading-relaxed">
-                  <p>• Pick a balance of players from both teams to hedge your points.</p>
-                  <p>• Pitch conditions in <span className="text-white font-bold">{match.venue}</span> generally favor {match.venue.length % 2 === 0 ? 'seamers' : 'spinners'}.</p>
-                  <p>• Your Captain (MVP) earns double points. Choose wisely!</p>
-                </div>
-             </div>
+          {/* Right Action Lock Bar */}
+          <div className="col-span-12 lg:col-span-4">
+            <SubmissionControl 
+              canSubmit={canSubmit}
+              statusMessage={statusMessage}
+              saving={saving}
+              selectedPlayers={selectedPlayers}
+              mvpId={mvpId}
+              onSave={handleSave}
+            />
           </div>
+
         </div>
       </main>
     </div>

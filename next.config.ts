@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'static.cricbuzz.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'www.cricbuzz.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i.cricketcb.com', // Added to allow Cricbuzz legacy storage CDN access
+      },
     ],
   },
 };
