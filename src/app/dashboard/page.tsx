@@ -17,11 +17,13 @@ import {
   Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getUserSquads, UserSquad } from '@/services/dataService';
+import { getUserSquads, getMatches, getPlayers } from '@/services/dataService';
+import { UserSquad, Match, Player } from '@/types';
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
-  const [squads, setSquads] = useState<UserSquad[]>([]);
+  const [squads, setSquads] = useState<(UserSquad & { match?: Match })[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const router = useRouter();
@@ -32,236 +34,328 @@ export default function Dashboard() {
 
   const handleSync = async () => {
     setSyncing(true);
-    setSyncStatus('Traversing Stadiums...');
+    setSyncStatus('Refining Fixtures...');
     try {
       const res = await fetch('/api/sync');
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { error: 'Invalid response from server' };
-      }
-
+      const data = await res.json();
       if (res.ok && data.success) {
-        setSyncStatus(`Successfully synced ${data.matchesSynced?.length || 0} fixtures!`);
-        setTimeout(() => window.location.reload(), 1500);
+        setSyncStatus(`Updated ${data.matchesSynced?.length || 0} fixtures`);
+        setTimeout(() => window.location.reload(), 1000);
       } else {
-        const errorMsg = data.message || data.error || `Server returned ${res.status}`;
-        setSyncStatus('Sync error: ' + errorMsg);
-        setTimeout(() => setSyncStatus(null), 6000);
+        setSyncStatus('Sync error: ' + (data.message || 'Server error'));
+        setTimeout(() => setSyncStatus(null), 4000);
       }
     } catch (error) {
-      console.error(error);
-      setSyncStatus('Network Error. Is your server running?');
-      setTimeout(() => setSyncStatus(null), 4000);
+      setSyncStatus('Network Error');
+      setTimeout(() => setSyncStatus(null), 3000);
     } finally {
       setSyncing(false);
     }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!u) router.push('/');
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (!u) {
+        router.push('/');
+        return;
+      }
+
+      try {
+        const [userSquads, allMatches, allPlayers] = await Promise.all([
+          getUserSquads(),
+          getMatches(),
+          getPlayers()
+        ]);
+        
+        setPlayers(allPlayers);
+
+        // Filter out matches that are long past (e.g. > 1 day ago) for the main view
+        const now = Date.now();
+        const enrichedSquads = userSquads
+          .map(s => ({
+            ...s,
+            match: allMatches.find(m => m.id === s.matchId)
+          }))
+          .sort((a, b) => {
+            const dateA = a.match ? new Date(a.match.date).getTime() : 0;
+            const dateB = b.match ? new Date(b.match.date).getTime() : 0;
+            return dateA - dateB;
+          });
+        
+        setSquads(enrichedSquads);
+      } catch (err) {
+        console.error('Failed to fetch data:', err);
+      } finally {
+        setLoading(false);
+      }
     });
 
-    const fetchSquads = async () => {
-      const data = await getUserSquads();
-      setSquads(data);
-      setLoading(false);
-    };
-
-    fetchSquads();
     return () => unsubscribe();
   }, [router]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
+  // Find the next upcoming/active squad
+  const now = Date.now();
+  const activeSquad = squads.find(s => {
+    if (!s.match) return false;
+    const mDate = new Date(s.match.date).getTime();
+    return mDate > now - (4 * 60 * 60 * 1000); // Show matches starting in the future or which started < 4h ago
+  }) || squads[0];
+
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-white font-sans selection:bg-blue-500 overflow-x-hidden">
       {/* Background Decor */}
-      <div className="fixed top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none -z-10" />
+      <div className="fixed top-0 right-0 w-[400px] h-[400px] bg-blue-600/5 blur-[120px] rounded-full pointer-events-none -z-10" />
 
-      {/* Sidebar Desktop */}
-      <div className="fixed left-0 top-0 bottom-0 w-24 border-r border-white/5 bg-black/40 backdrop-blur-xl z-50 flex flex-col items-center py-10 gap-10">
-        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center rotate-3">
-          <Trophy className="text-white w-6 h-6" />
+      {/* Sidebar Desktop - Even slimmer */}
+      <div className="fixed left-0 top-0 bottom-0 w-16 border-r border-white/5 bg-black/40 backdrop-blur-xl z-50 flex flex-col items-center py-6 gap-6">
+        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center -rotate-3 mb-2 shadow-lg shadow-blue-500/20">
+          <Trophy className="text-white w-4 h-4" />
         </div>
         
-        <div className="flex flex-col gap-6">
-          <Link href="/dashboard" className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-all">
-            <LayoutDashboard className="w-5 h-5" />
+        <div className="flex flex-col gap-3">
+          <Link href="/dashboard" className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-all">
+            <LayoutDashboard className="w-3.5 h-3.5" />
           </Link>
-          <Link href="/matches" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all">
-            <Zap className="w-5 h-5 text-gray-500 hover:text-white" />
+          <Link href="/matches" className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all group">
+            <Zap className="w-3.5 h-3.5 text-gray-500 group-hover:text-white" />
           </Link>
-          <Link href="#" className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all">
-            <Users className="w-5 h-5 text-gray-500 hover:text-white" />
+          <Link href="/leaderboard" className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all group">
+            <Users className="w-3.5 h-3.5 text-gray-500 group-hover:text-white" />
           </Link>
         </div>
 
         <div className="mt-auto">
-          <button onClick={() => auth.signOut()} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-red-500/20 group transition-all">
-             <Settings className="w-5 h-5 text-gray-500 group-hover:text-red-500" />
+          <button onClick={() => auth.signOut()} className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center hover:bg-red-500/10 group transition-all">
+             <Settings className="w-3.5 h-3.5 text-gray-500 group-hover:text-red-500" />
           </button>
         </div>
       </div>
 
-      <main className="ml-24 p-10 max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="flex justify-between items-end mb-16">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono text-[10px] uppercase tracking-widest font-black">
-              <Zap size={12} className="fill-current" />
-              Stadium Connection Active
+      <main className="ml-16 p-6 lg:p-10 max-w-6xl mx-auto">
+        {/* Header - More compact */}
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[8px] uppercase tracking-widest font-black">
+              <Zap size={8} className="fill-current" />
+              Live Feed Connected
             </div>
-            <h1 className="text-6xl font-display font-black uppercase tracking-tighter italic leading-none">
-              Welcome Back, <br />
-              <span className="text-blue-500">{user?.displayName?.split(' ')[0]}</span>
+            <h1 className="text-3xl md:text-4xl font-display font-black uppercase tracking-tighter italic leading-none">
+              Welcome, <span className="text-blue-500">{user?.displayName?.split(' ')[0]}</span>
             </h1>
           </div>
           
-          <div className="bg-white/2 border border-white/5 rounded-[32px] p-2 flex gap-2">
-            <div className="px-6 py-4 rounded-[24px] bg-black/40 border border-white/5 flex flex-col items-center">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none mb-1">Rank</span>
-              <span className="text-2xl font-display font-black italic">--</span>
+          <div className="flex gap-2">
+            <div className="px-4 py-2 rounded-xl bg-white/2 border border-white/5 flex flex-col items-center min-w-[70px]">
+              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest leading-none mb-1">Rank</span>
+              <span className="text-lg font-display font-black italic">#1.4k</span>
             </div>
-            <div className="px-6 py-4 rounded-[24px] bg-blue-600 flex flex-col items-center shadow-lg shadow-blue-500/20">
-              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest leading-none mb-1">Credits</span>
-              <span className="text-2xl font-display font-black italic">100</span>
+            <div className="px-4 py-2 rounded-xl bg-blue-600 flex flex-col items-center min-w-[70px] shadow-lg shadow-blue-500/10 border border-blue-400/20">
+              <span className="text-[8px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">Credits</span>
+              <span className="text-lg font-display font-black italic">1,250</span>
             </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-12 gap-10">
-          {/* Active Campaigns */}
-          <div className="col-span-12 lg:col-span-8 space-y-8">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display font-black text-3xl uppercase tracking-tight italic">Your Active Drafts</h2>
-              <Link href="/matches" className="text-xs font-black text-blue-500 uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
-                View Matches <ChevronRight size={14} />
+        <div className="space-y-10">
+          {/* Focused Squad Section */}
+          <section className="space-y-5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <h2 className="font-display font-black text-xl uppercase tracking-tighter italic">Primary Draft</h2>
+                {squads.length > 1 && (
+                  <span className="bg-white/5 text-gray-500 text-[8px] font-black px-1.5 py-0.5 rounded border border-white/5">+{squads.length - 1} Others</span>
+                )}
+              </div>
+              <Link href="/matches" className="text-[9px] font-black text-gray-500 hover:text-blue-500 uppercase tracking-[0.2em] flex items-center gap-1.5 transition-all group">
+                All Fixtures <ChevronRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
-            {squads.length === 0 ? (
-              <div className="aspect-[21/9] rounded-[48px] bg-white/2 border border-white/5 border-dashed flex flex-col items-center justify-center p-12 text-center group">
-                <PlusCircle className="w-16 h-16 text-gray-700 mb-6 group-hover:text-blue-500 transition-colors" />
-                <h3 className="font-display font-black text-2xl uppercase tracking-tight italic mb-2">No Active Squads</h3>
-                <p className="text-gray-500 max-w-sm mb-8">You haven&apos;t participated in any arena matches yet. Start by entering a stadium.</p>
-                <Link href="/matches" className="bg-white text-black px-8 py-4 rounded-full font-display font-black text-sm uppercase tracking-tight active:scale-95 transition-all">
-                  Join Match
+            {!activeSquad ? (
+              <div className="h-40 rounded-2xl bg-white/2 border border-white/5 border-dashed flex flex-col items-center justify-center text-center px-6">
+                <PlusCircle className="w-8 h-8 text-gray-800 mb-2" />
+                <h3 className="font-display font-black text-base uppercase italic text-gray-500 mb-1">Ready for Kickoff?</h3>
+                <p className="text-[10px] text-gray-600 mb-3 max-w-xs leading-relaxed">No active trios found. Select an upcoming match to start drafting.</p>
+                <Link href="/matches" className="bg-white text-black px-5 py-2 rounded-lg font-display font-black text-[10px] uppercase tracking-tight hover:bg-blue-500 hover:text-white transition-all">
+                  Browse Matches
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {squads.map((squad, i) => (
-                   <div key={i} className="p-8 rounded-[40px] bg-white/2 border border-white/5 hover:bg-white/5 transition-all group relative overflow-hidden">
-                      <div className="flex justify-between items-start mb-6">
-                        <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center">
-                          <Users className="text-blue-500" />
-                        </div>
-                        <span className="font-mono text-[10px] text-gray-500 uppercase font-black">Draft ID: {squad.matchId}</span>
+              <div 
+                onClick={() => router.push(`/matches/${activeSquad.matchId}`)}
+                className="relative group cursor-pointer active:scale-[0.99] transition-transform"
+              >
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-pink-500 rounded-[2rem] opacity-20 blur group-hover:opacity-30 transition-opacity" />
+                <div className="relative p-7 rounded-[2rem] bg-black/60 border border-white/10 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="px-2 py-1 bg-blue-500/10 rounded-md border border-blue-500/20">
+                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Next Clash</span>
                       </div>
-                      <h3 className="font-display font-black text-2xl uppercase tracking-tighter italic mb-4">Ultimate XI</h3>
-                      <div className="flex items-center gap-4 text-xs font-black uppercase text-gray-400">
-                        <span className="flex items-center gap-2"><Clock size={14} className="text-blue-500" /> 2d Remaining</span>
-                        <span className="flex items-center gap-2 underline text-blue-500 decoration-2 underline-offset-4 cursor-pointer hover:text-white transition-colors">Edit Squad</span>
+                      <span className="font-mono text-[9px] text-gray-600">ID: {activeSquad.matchId}</span>
+                    </div>
+
+                    <h3 className="font-display font-black text-4xl uppercase tracking-tighter italic leading-none mb-3">
+                      {activeSquad.match ? (
+                        <>
+                          <span className={cn(
+                            "transition-colors",
+                            activeSquad.match.team1 === 'LSG' ? "text-cyan-400" : 
+                            activeSquad.match.team1 === 'CSK' ? "text-yellow-400" :
+                            activeSquad.match.team1 === 'MI' ? "text-blue-400" :
+                            "text-blue-400"
+                          )}>{activeSquad.match.team1}</span>
+                          <span className="text-gray-800 px-3 opacity-50 select-none">VS</span>
+                          <span className={cn(
+                            "transition-colors",
+                            activeSquad.match.team2 === 'MI' ? "text-blue-400" :
+                            activeSquad.match.team2 === 'GT' ? "text-slate-200" :
+                            activeSquad.match.team2 === 'SRH' ? "text-orange-500" :
+                            "text-pink-400"
+                          )}>{activeSquad.match.team2}</span>
+                        </>
+                      ) : 'Unknown Match'}
+                    </h3>
+
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap gap-2">
+                         {activeSquad.players.map((pId, idx) => {
+                           const player = players.find(p => p.id === pId);
+                           const isMvp = activeSquad.mvpId === pId;
+                           return (
+                             <div key={idx} className={cn(
+                               "flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all",
+                               isMvp ? "bg-amber-500/10 border-amber-500/20 text-amber-500" : "bg-white/5 border-white/5 text-gray-400"
+                             )}>
+                               {isMvp && <Zap size={10} className="fill-current" />}
+                               <span className="text-[10px] font-black uppercase tracking-tight">
+                                 {player ? player.name.split(' ').pop() : `Player ${idx+1}`}
+                               </span>
+                             </div>
+                           );
+                         })}
                       </div>
-                   </div>
-                 ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-3 min-w-[120px]">
+                    {(() => {
+                      const mDate = activeSquad.match ? new Date(activeSquad.match.date).getTime() : 0;
+                      const tLeft = mDate - Date.now();
+                      const isLocked = tLeft < 30 * 60 * 1000;
+                      
+                      return (
+                        <>
+                          <div className={cn(
+                            "px-4 py-2 rounded-xl flex items-center gap-2 border text-[10px] font-black uppercase tracking-widest italic",
+                            isLocked ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          )}>
+                            <Clock size={12} />
+                            {isLocked ? 'LOCKED' : 'EDITABLE'}
+                          </div>
+                          
+                          {!isLocked ? (
+                            <Link 
+                              href={`/matches/${activeSquad.matchId}`}
+                              className="w-full bg-white text-black py-2.5 rounded-xl text-center font-display font-black text-[11px] uppercase tracking-tight hover:bg-blue-600 hover:text-white transition-all shadow-xl shadow-black/20"
+                            >
+                              Edit Squad
+                            </Link>
+                          ) : (
+                            <p className="text-[9px] text-gray-500 text-right leading-tight max-w-[100px] italic">
+                              Squad submitted. Tuning in for the toss...
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
             )}
+          </section>
 
-            {/* Quick Actions */}
-            <div className="pt-12 space-y-6">
-                <h2 className="font-display font-black text-3xl uppercase tracking-tight italic">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Link href="/matches" className="w-full flex items-center justify-between p-6 rounded-[28px] bg-white/2 border border-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group">
-                  <div className="flex items-center gap-4">
-                    <PlusCircle className="w-6 h-6 text-blue-500" />
-                    <div className="flex flex-col">
-                      <span className="font-display font-black text-lg uppercase tracking-tight">Enter Live Stadium</span>
-                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none mt-1">Join upcoming matches</span>
-                    </div>
+          {/* Arena Navigation - Compact Grid */}
+          <section className="space-y-5">
+            <h2 className="font-display font-black text-xl uppercase tracking-tighter italic border-b border-white/5 pb-3">
+              Quick Links
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <Link href="/matches" className="flex items-center gap-3 p-4 rounded-xl bg-white/2 border border-white/5 hover:bg-white/5 transition-all group">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <PlusCircle className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div>
+                  <span className="block font-display font-black text-xs uppercase">Fixtures</span>
+                  <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest leading-none">Enter Stadium</span>
+                </div>
+              </Link>
+
+              <Link href="/leaderboard" className="flex items-center gap-3 p-4 rounded-xl bg-white/2 border border-white/5 hover:bg-white/5 transition-all group">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4 text-amber-500" />
+                </div>
+                <div>
+                  <span className="block font-display font-black text-xs uppercase">Ranks</span>
+                  <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest leading-none">Global Board</span>
+                </div>
+              </Link>
+
+              {isAdmin && (
+                <button 
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex items-center gap-3 p-4 rounded-xl bg-blue-600/10 border border-blue-500/20 hover:bg-blue-600/20 transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Zap className={cn("w-4 h-4 text-blue-400", syncing && "animate-pulse")} />
                   </div>
-                  <ChevronRight size={20} className="text-gray-700 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                </Link>
+                  <div className="overflow-hidden">
+                    <span className="block font-display font-black text-xs uppercase">Sync API</span>
+                    <span className="text-[8px] font-bold text-blue-400 uppercase tracking-widest leading-none block truncate">
+                      {syncStatus || 'Admin'}
+                    </span>
+                  </div>
+                </button>
+              )}
+            </div>
+          </section>
 
-                {isAdmin && (
-                  <button 
-                    onClick={handleSync}
-                    disabled={syncing}
-                    className="w-full flex items-center justify-between p-6 rounded-[28px] bg-blue-600/10 border border-blue-500/20 hover:bg-blue-600/20 hover:border-blue-500/40 transition-all text-left group disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-4">
-                      <Zap className={cn("w-6 h-6 text-blue-500", syncing && "animate-pulse")} />
+          {/* Historical / Other Drafts - Simple List */}
+          {squads.length > 1 && (
+             <section className="space-y-4">
+               <h2 className="font-display font-black text-sm uppercase tracking-widest text-gray-600 italic">Remaining Drafts</h2>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                 {squads.filter(s => s.matchId !== activeSquad?.matchId).map((s, i) => (
+                   <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
                       <div className="flex flex-col">
-                        <span className="font-display font-black text-lg uppercase tracking-tight">
-                          {syncing ? 'REFINING ARENA...' : 'REFRESH LIVE ARENA'}
-                        </span>
-                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mt-1">
-                          {syncStatus || 'Admin Power'}
+                        <span className="text-[9px] font-bold text-gray-600 uppercase tracking-widest">Match {s.matchId}</span>
+                        <span className="font-display font-black text-sm italic uppercase">
+                          {s.match ? `${s.match.team1} vs ${s.match.team2}` : 'Unknown Match'}
                         </span>
                       </div>
-                    </div>
-                    <ChevronRight size={20} className="text-blue-700 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                  </button>
-                )}
-
-                <button className="w-full flex items-center justify-between p-6 rounded-[28px] bg-white/2 border border-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group">
-                  <div className="flex items-center gap-4">
-                    <Trophy className="w-6 h-6 text-yellow-500" />
-                    <div className="flex flex-col">
-                      <span className="font-display font-black text-lg uppercase tracking-tight">Top Strategists</span>
-                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none mt-1">View worldwide rankings</span>
-                    </div>
-                  </div>
-                  <ChevronRight size={20} className="text-gray-700 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                </button>
-                </div>
-            </div>
-          </div>
-
-          {/* Stats / Sidebar */}
-          <div className="col-span-12 lg:col-span-4 space-y-8">
-             <div className="p-10 rounded-[48px] bg-blue-600 relative overflow-hidden group shadow-2xl shadow-blue-500/20">
-                <div className="absolute top-0 right-0 p-4 opacity-20">
-                  <Trophy size={120} />
-                </div>
-                <div className="relative z-10 space-y-6">
-                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                    <Zap className="text-white w-6 h-6" />
-                  </div>
-                  <h3 className="font-display font-black text-4xl uppercase tracking-tighter italic leading-none">The Path to <br /> Glory</h3>
-                  <p className="text-white/70 text-sm font-medium leading-relaxed">Win 5 matches this season to unlock the <span className="text-white font-black underline underline-offset-4 decoration-2">Titan Badge</span> and entry to the Masters League.</p>
-                  <button className="w-full bg-black py-4 rounded-full font-display font-black text-xs uppercase tracking-widest hover:scale-95 transition-all">View Mission</button>
-                </div>
-             </div>
-
-             <div className="p-10 rounded-[48px] bg-white/2 border border-white/5 space-y-8">
-                <h3 className="font-display font-black text-2xl uppercase tracking-tight italic">Arena Stats</h3>
-                <div className="space-y-6">
-                  {[
-                    { label: "Matches Played", val: "0" },
-                    { label: "Win Rate", val: "0%" },
-                    { label: "Draft Score", val: "0" }
-                  ].map((stat, i) => (
-                    <div key={i} className="flex justify-between items-end border-b border-white/5 pb-4">
-                        <span className="font-mono text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{stat.label}</span>
-                        <span className="font-display font-black text-2xl uppercase tracking-tight italic">{stat.val}</span>
-                    </div>
-                  ))}
-                </div>
-             </div>
-          </div>
+                      <Link 
+                        href={`/matches/${s.matchId}`}
+                        className="text-[9px] font-black text-blue-500 hover:text-white uppercase tracking-widest px-3 py-1.5 rounded-md border border-blue-500/10 hover:bg-blue-500 transition-all"
+                      >
+                        View
+                      </Link>
+                   </div>
+                 ))}
+               </div>
+             </section>
+          )}
         </div>
       </main>
     </div>
-  );
+  )
 }

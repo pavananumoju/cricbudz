@@ -4,8 +4,8 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getMatchById, getPlayersByTeams, saveUserSquad } from '@/services/dataService';
-import { Player, Match } from '@/types';
+import { getMatchById, getPlayersByTeams, saveUserSquad, getUserSquads } from '@/services/dataService';
+import { Player, Match, UserSquad } from '@/types';
 import { cn } from '@/lib/utils';
 
 // Component Imports
@@ -53,12 +53,26 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     const fetchData = async () => {
-      const matchData = await getMatchById(id);
+      const [matchData, allUserSquads] = await Promise.all([
+        getMatchById(id),
+        getUserSquads()
+      ]);
+
       if (matchData) {
         setMatch(matchData);
-        const players = await getPlayersByTeams(matchData.team1, matchData.team2);
-        setTeam1Players(players.filter(p => p.team.toUpperCase() === matchData.team1.toUpperCase()));
-        setTeam2Players(players.filter(p => p.team.toUpperCase() === matchData.team2.toUpperCase()));
+        const playersByTeams = await getPlayersByTeams(matchData.team1, matchData.team2);
+        const t1 = playersByTeams.filter(p => p.team.toUpperCase() === matchData.team1.toUpperCase());
+        const t2 = playersByTeams.filter(p => p.team.toUpperCase() === matchData.team2.toUpperCase());
+        setTeam1Players(t1);
+        setTeam2Players(t2);
+
+        // Check if there is an existing squad for this match
+        const existingSquad = allUserSquads.find(s => s.matchId === id);
+        if (existingSquad) {
+          const selected = playersByTeams.filter(p => existingSquad.players.includes(p.id));
+          setSelectedPlayers(selected);
+          setMvpId(existingSquad.mvpId);
+        }
       }
       setLoading(false);
     };
@@ -95,6 +109,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   };
 
   const selectPlayer = (player: Player) => {
+    if (isLocked) return;
     setUiFeedback(null);
     if (selectedPlayers.find(p => p.id === player.id)) {
       removePlayer(player.id);
@@ -118,12 +133,18 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   };
 
   const removePlayer = (id: string) => {
+    if (isLocked) return;
     setSelectedPlayers(selectedPlayers.filter(p => p.id !== id));
     if (mvpId === id) setMvpId(null);
     setUiFeedback(null);
   };
 
+  const isLocked = match ? new Date(match.date).getTime() - Date.now() < 30 * 60 * 1000 : false;
+
   const checkStatusDetails = (): { canSubmit: boolean; message: string } => {
+    if (isLocked) {
+      return { canSubmit: false, message: 'This arena is now locked. No further modifications to your Trio Draft are permitted.' };
+    }
     if (selectedPlayers.length < SQUAD_TARGET_SIZE) {
       return { canSubmit: false, message: `Add ${SQUAD_TARGET_SIZE - selectedPlayers.length} more player(s) to complete your trio.` };
     }
@@ -303,6 +324,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                     canSubmit={canSubmit}
                     statusMessage={statusMessage}
                     saving={saving}
+                    isLocked={isLocked}
                     recommending={recommending}
                     selectedPlayers={selectedPlayers}
                     mvpId={mvpId}
