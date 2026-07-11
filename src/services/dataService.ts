@@ -162,10 +162,15 @@ export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt
 }
 
 export async function getUserSquads(): Promise<UserSquad[]> {
-  const userId = auth.currentUser?.uid;
-  if (!userId) return [];
-  
-  const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => d.data() as UserSquad);
+  try {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return [];
+    
+    const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as UserSquad);
+  } catch (err) {
+    console.error('getUserSquads error:', err);
+    return [];
+  }
 }

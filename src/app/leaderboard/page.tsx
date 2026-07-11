@@ -1,8 +1,10 @@
-"use client";
+'use client';
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { Trophy, Medal, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trophy, Medal, ChevronUp, ChevronDown, Minus } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
+import { cn } from '@/lib/utils';
 
 const MOCK_LEADERBOARD = [
   { id: '1', name: 'Virat K.', points: 15420, rank: 1, trend: 'up', avatar: 'https://picsum.photos/seed/v1/100/100' },
@@ -18,150 +20,95 @@ const MOCK_LEADERBOARD = [
 ];
 
 export default function LeaderboardPage() {
+  const [second, first, third] = [MOCK_LEADERBOARD[1], MOCK_LEADERBOARD[0], MOCK_LEADERBOARD[2]];
+
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        
-        {/* Header Section */}
-        <header className="mb-16">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3 mb-2"
-          >
-            <div className="w-8 h-8 bg-yellow-600/20 rounded-lg flex items-center justify-center text-yellow-500">
-              <Trophy size={18} />
-            </div>
-            <h1 className="text-xs font-black text-yellow-500 uppercase tracking-[0.3em]">Halla Bol!</h1>
-          </motion.div>
-          <motion.h2 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-5xl md:text-7xl font-display font-black tracking-tighter"
-          >
-            GLOBAL <span className="text-yellow-500 italic">LEAGUE.</span>
-          </motion.h2>
-          <p className="text-gray-500 mt-4 text-lg font-medium max-w-xl">
-            The hall of fame for the ultimate dreamers. Top strategies, legendary squads, and the highest scorers of IPL 2026.
-          </p>
-        </header>
-
-        {/* Top 3 Podium */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 items-end">
-          {/* Rank 2 */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="order-2 md:order-1"
-          >
-            <div className="bg-white/5 border border-white/10 rounded-[40px] p-8 text-center relative overflow-hidden group">
-              <div className="absolute top-0 inset-x-0 h-1 flex justify-center">
-                <div className="w-24 h-full bg-slate-400 rounded-full" />
-              </div>
-              <div className="w-24 h-24 rounded-[32px] mx-auto mb-6 border-4 border-slate-400 shadow-2xl overflow-hidden">
-                <img src={MOCK_LEADERBOARD[1].avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <h3 className="text-2xl font-display font-black mb-1">{MOCK_LEADERBOARD[1].name}</h3>
-              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest mb-4">Silver Medalist</p>
-              <div className="bg-slate-400/10 text-slate-400 py-3 rounded-2xl font-display font-black text-2xl">
-                {MOCK_LEADERBOARD[1].points.toLocaleString()} PTS
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Rank 1 */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-            className="order-1 md:order-2"
-          >
-            <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-[48px] p-10 text-center relative overflow-hidden group">
-              <div className="absolute top-0 inset-x-0 h-2 flex justify-center">
-                <div className="w-32 h-full bg-yellow-500 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
-              </div>
-              <div className="absolute top-4 right-4 text-yellow-500">
-                <Medal size={40} className="drop-shadow-lg" />
-              </div>
-              <div className="w-32 h-32 rounded-[40px] mx-auto mb-8 border-4 border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.3)] overflow-hidden">
-                <img src={MOCK_LEADERBOARD[0].avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <h3 className="text-3xl font-display font-black mb-1">{MOCK_LEADERBOARD[0].name}</h3>
-              <p className="text-yellow-500 font-bold text-sm uppercase tracking-widest mb-6">World Champion</p>
-              <div className="bg-yellow-500 text-black py-4 rounded-3xl font-display font-black text-3xl shadow-xl shadow-yellow-500/20">
-                {MOCK_LEADERBOARD[0].points.toLocaleString()} PTS
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Rank 3 */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="order-3"
-          >
-            <div className="bg-white/5 border border-white/10 rounded-[40px] p-8 text-center relative overflow-hidden group">
-              <div className="absolute top-0 inset-x-0 h-1 flex justify-center">
-                <div className="w-24 h-full bg-amber-600 rounded-full" />
-              </div>
-              <div className="w-24 h-24 rounded-[32px] mx-auto mb-6 border-4 border-amber-600 shadow-2xl overflow-hidden">
-                <img src={MOCK_LEADERBOARD[2].avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <h3 className="text-2xl font-display font-black mb-1">{MOCK_LEADERBOARD[2].name}</h3>
-              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest mb-4">Bronze Medalist</p>
-              <div className="bg-amber-600/10 text-amber-600 py-3 rounded-2xl font-display font-black text-2xl">
-                {MOCK_LEADERBOARD[2].points.toLocaleString()} PTS
-              </div>
-            </div>
-          </motion.div>
+    <div className="px-4 space-y-6 pb-4 lg:max-w-2xl lg:mx-auto">
+      <header className="space-y-2 pt-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-tint border border-accent/20 text-accent font-mono text-[10px] uppercase tracking-widest font-black">
+          <Trophy size={11} />
+          Halla Bol!
         </div>
+        <h1 className="text-3xl font-display font-black tracking-tighter uppercase italic leading-none">
+          Global <span className="text-accent">League</span>
+        </h1>
+        <p className="text-muted text-sm font-medium">Top strategists of IPL 2026.</p>
+      </header>
 
-        {/* Regular List */}
-        <div className="bg-white/5 border border-white/10 rounded-[40px] overflow-hidden">
-          <div className="grid grid-cols-12 gap-4 p-8 border-b border-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest">
-            <div className="col-span-1">Rank</div>
-            <div className="col-span-7">Player</div>
-            <div className="col-span-2 text-right">Trend</div>
-            <div className="col-span-2 text-right">Points</div>
-          </div>
-
-          <div className="divide-y divide-white/5">
-            {MOCK_LEADERBOARD.slice(3).map((item, idx) => (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 + idx * 0.05 }}
-                key={item.id} 
-                className="grid grid-cols-12 gap-4 p-8 items-center group hover:bg-white/5 transition-colors"
+      {/* Podium */}
+      <div className="grid grid-cols-3 gap-2.5 items-end">
+        {[second, first, third].map((entry) => {
+          const isFirst = entry.rank === 1;
+          return (
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: isFirst ? 0.05 : 0.15 }}
+            >
+              <Card
+                className={cn(
+                  'text-center relative overflow-hidden',
+                  isFirst ? 'p-4 pt-6 border-accent/40 shadow-md' : 'p-3 pt-5'
+                )}
               >
-                <div className="col-span-1 font-display font-black text-2xl text-white/20 group-hover:text-white transition-colors">
-                  #{item.rank}
+                {isFirst && (
+                  <Medal size={22} className="absolute top-2.5 right-2.5 text-accent" />
+                )}
+                <div
+                  className={cn(
+                    'mx-auto mb-2.5 rounded-2xl overflow-hidden border-2',
+                    isFirst ? 'w-14 h-14 border-accent' : 'w-11 h-11 border-border'
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={entry.avatar} alt="" className="w-full h-full object-cover" />
                 </div>
-                <div className="col-span-7 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white/5 overflow-hidden border border-white/10 group-hover:border-blue-500 transition-colors">
-                    <img src={item.avatar} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100" />
-                  </div>
-                  <div>
-                    <h4 className="font-display font-black text-lg tracking-tight uppercase group-hover:text-blue-500 transition-colors">{item.name}</h4>
-                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Global Division</span>
-                  </div>
+                <h3 className={cn('font-display font-black truncate', isFirst ? 'text-sm' : 'text-xs')}>{entry.name}</h3>
+                <p className="text-muted text-[8px] font-bold uppercase tracking-widest mt-0.5 mb-2">#{entry.rank}</p>
+                <div
+                  className={cn(
+                    'rounded-xl font-display font-black',
+                    isFirst ? 'bg-accent text-white py-2 text-sm' : 'bg-surface-hover text-muted py-1.5 text-xs'
+                  )}
+                >
+                  {entry.points.toLocaleString()}
                 </div>
-                <div className="col-span-2 flex justify-end">
-                  {item.trend === 'up' && <div className="text-green-500 bg-green-500/10 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black"><ChevronUp size={14} /> UP</div>}
-                  {item.trend === 'down' && <div className="text-red-500 bg-red-500/10 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black"><ChevronDown size={14} /> DOWN</div>}
-                  {item.trend === 'stable' && <div className="text-gray-500 bg-white/5 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black">STABLE</div>}
-                </div>
-                <div className="col-span-2 text-right font-display font-black text-2xl">
-                  {item.points.toLocaleString()}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+              </Card>
+            </motion.div>
+          );
+        })}
       </div>
+
+      {/* Rest of the list */}
+      <Card className="overflow-hidden">
+        <div className="divide-y divide-border">
+          {MOCK_LEADERBOARD.slice(3).map((item, idx) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 + idx * 0.03 }}
+              className="flex items-center gap-3 p-3.5"
+            >
+              <span className="w-6 text-center font-display font-black text-sm text-muted/50 shrink-0">
+                {item.rank}
+              </span>
+              <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.avatar} alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="font-display font-black text-xs uppercase truncate">{item.name}</h4>
+              </div>
+              {item.trend === 'up' && <ChevronUp size={14} className="text-success shrink-0" />}
+              {item.trend === 'down' && <ChevronDown size={14} className="text-danger shrink-0" />}
+              {item.trend === 'stable' && <Minus size={14} className="text-muted shrink-0" />}
+              <span className="font-display font-black text-sm shrink-0 w-14 text-right">{item.points.toLocaleString()}</span>
+            </motion.div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

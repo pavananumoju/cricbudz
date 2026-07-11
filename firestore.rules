@@ -13,6 +13,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Ready for any future admin-only client write (e.g. a config doc).
+    // Not referenced by a rule yet: today's only admin action (/api/sync)
+    // writes via the Admin SDK, which bypasses these rules entirely.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
     match /userSquads/{squadId} {
       allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;

@@ -12,6 +12,7 @@ interface SelectedSlotsProps {
   onRemove: (id: string) => void;
   onSetMvp: (id: string) => void;
   getTeamBrand: (team: string) => any;
+  locked?: boolean;
 }
 
 function SlotImage({ player, brand }: { player: Player; brand: any }) {
@@ -65,10 +66,11 @@ export default function SelectedSlots({
   mvpId,
   onRemove,
   onSetMvp,
-  getTeamBrand
+  getTeamBrand,
+  locked
  }: SelectedSlotsProps) {
   return (
-    <div className="w-full max-w-md mx-auto flex flex-col gap-1.5 md:gap-2 my-2 md:my-4">
+    <div className="w-full flex md:flex-col gap-2 no-scrollbar">
       {[0, 1, 2].map((index) => {
         const player = selectedPlayers[index];
         const isAssignedMvp = player && mvpId === player.id;
@@ -78,30 +80,30 @@ export default function SelectedSlots({
           <div 
             key={index} 
             className={cn(
-              "relative h-10 md:h-12 rounded-xl border transition-all flex items-center justify-between px-3 md:px-4",
-              player 
-                ? isAssignedMvp 
-                  ? "bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-950/20"
-                  : "bg-white/5 border-white/10"
-                : "bg-black/20 border-dashed border-white/5"
+              "relative flex-1 md:flex-none h-12 rounded-xl border transition-all flex items-center justify-between px-3",
+              player
+                ? isAssignedMvp
+                  ? "bg-accent-tint border-accent/40 shadow-sm"
+                  : "bg-surface border-border shadow-sm"
+                : "bg-surface-hover/50 border-dashed border-border"
             )}
           >
             {player && playerBrand ? (
               <>
-                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 pr-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1 pr-1">
                   <div className={cn(
-                    "w-7 h-7 md:w-8 md:h-8 rounded-lg bg-black/40 border relative overflow-hidden flex-shrink-0 flex items-center justify-center",
+                    "w-7 h-7 rounded-lg bg-surface-hover border relative overflow-hidden flex-shrink-0 flex items-center justify-center",
                     playerBrand.borderClass
                   )}>
                     <SlotImage player={player} brand={playerBrand} />
                   </div>
-                  
+
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-display font-black text-[10px] md:text-[11px] uppercase tracking-tight italic truncate text-gray-100 leading-tight pr-1">
+                    <h4 className="font-display font-black text-[11px] uppercase tracking-tight italic truncate text-foreground leading-tight pr-2">
                       {player.name}
                     </h4>
                     <span className={cn(
-                      "text-[7px] md:text-[8px] font-mono tracking-widest font-black uppercase transition-all",
+                      "text-[8px] font-mono tracking-widest font-black uppercase",
                       playerBrand.textClass
                     )}>
                       {player.team}
@@ -109,37 +111,45 @@ export default function SelectedSlots({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => onSetMvp(player.id)}
-                    className={cn(
-                      "w-6 h-6 rounded-lg flex items-center justify-center transition-all",
-                      isAssignedMvp 
-                        ? "bg-amber-500 text-black shadow-md shadow-amber-500/20" 
-                        : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-amber-400"
-                    )}
-                  >
-                    <Zap size={11} className={isAssignedMvp ? "fill-current" : ""} />
-                  </button>
-                  
-                  <button 
-                    type="button"
-                    onClick={() => onRemove(player.id)}
-                    className="w-6 h-6 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 flex items-center justify-center transition-all"
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
+                {locked ? (
+                  isAssignedMvp && (
+                    <div className="w-6 h-6 rounded-lg bg-accent text-white flex items-center justify-center flex-shrink-0 ml-auto">
+                      <Zap size={11} className="fill-current" />
+                    </div>
+                  )
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => onSetMvp(player.id)}
+                      className={cn(
+                        "w-6 h-6 rounded-lg flex items-center justify-center transition-all",
+                        isAssignedMvp
+                          ? "bg-accent text-white shadow-sm"
+                          : "bg-surface-hover text-muted hover:bg-accent-tint hover:text-accent"
+                      )}
+                    >
+                      <Zap size={11} className={isAssignedMvp ? "fill-current" : ""} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onRemove(player.id)}
+                      className="w-6 h-6 rounded-lg bg-surface-hover hover:bg-danger-tint text-muted hover:text-danger flex items-center justify-center transition-all"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
-              <div className="flex items-center gap-2 mx-auto text-white/5">
+              <div className="flex items-center gap-2 mx-auto text-muted/60">
                 <User size={10} />
                 <span className="font-display font-black text-[8px] uppercase tracking-widest italic">Trio Slot 0{index + 1}</span>
               </div>
             )}
             {isAssignedMvp && (
-              <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter italic shadow-lg z-10">
+              <div className="absolute -top-1.5 -right-1.5 bg-accent text-white px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter italic shadow-sm z-10">
                 MVP
               </div>
             )}

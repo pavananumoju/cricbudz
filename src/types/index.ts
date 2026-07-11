@@ -20,11 +20,16 @@ export interface Player {
 export interface Match {
   id: string;
   team1: string;
+  team1Id?: number;
+  team1LogoId?: number;
   team2: string;
+  team2Id?: number;
+  team2LogoId?: number;
   date: string;
   status: 'UPCOMING' | 'LIVE' | 'COMPLETED' | string;
   tossStatus?: string;
   venue: string;
+  matchDesc?: string;
 }
 
 export interface UserSquad {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Plus } from 'lucide-react';
+import { Check, Plus, Lock } from 'lucide-react';
 import Image from 'next/image';
 import { useState } from 'react';
 import { Player } from '@/types';
@@ -15,10 +15,11 @@ interface PlayerCardProps {
     accentColor: string;
   };
   isSelected: boolean;
+  disabled?: boolean;
   onSelect: () => void;
 }
 
-export default function PlayerCard({ player, brand, isSelected, onSelect }: PlayerCardProps) {
+export default function PlayerCard({ player, brand, isSelected, disabled, onSelect }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
 
   const numericId = player.imageId ? String(player.imageId).trim() : String(player.id).trim();
@@ -40,14 +41,21 @@ export default function PlayerCard({ player, brand, isSelected, onSelect }: Play
   return (
     <button
       onClick={onSelect}
+      disabled={disabled}
+      aria-disabled={disabled}
       className={cn(
-        "w-full flex items-center gap-3 p-2 rounded-xl border transition-all text-left group overflow-hidden relative",
-        isSelected ? "bg-white/5 border-white/10 shadow-lg shadow-black/20" : "bg-white/2 border-white/5 hover:bg-white/5"
+        "w-full flex items-center gap-3 p-2 lg:p-2.5 rounded-xl border transition-all text-left group overflow-hidden relative",
+        disabled ? "cursor-not-allowed" : "active:scale-[0.98]",
+        isSelected
+          ? "bg-surface-hover border-border shadow-sm"
+          : cn("bg-surface border-border/70 shadow-sm", !disabled && "hover:bg-surface-hover"),
+        disabled && !isSelected && "opacity-50"
       )}
     >
       <div className={cn(
-        "w-9 h-9 rounded-lg bg-black/40 border overflow-hidden relative flex-shrink-0 flex items-center justify-center",
-        brand.borderClass
+        "w-9 h-9 lg:w-10 lg:h-10 rounded-lg bg-surface-hover border overflow-hidden relative flex-shrink-0 flex items-center justify-center",
+        brand.borderClass,
+        disabled && !isSelected && "grayscale"
       )}>
         {!imgError && numericId && numericId !== 'undefined' ? (
           <Image 
@@ -73,31 +81,38 @@ export default function PlayerCard({ player, brand, isSelected, onSelect }: Play
         )}
       </div>
 
-      <div className="flex-1 min-w-0 pr-1">
-        <h4 className="font-display font-black text-xs uppercase tracking-tight italic truncate leading-tight">{player.name}</h4>
+      <div className="flex-1 min-w-0 pr-2">
+        <h4 className="font-display font-black text-xs lg:text-[13px] uppercase tracking-tight italic truncate leading-tight pr-2 text-foreground">{player.name}</h4>
         <div className="flex items-center gap-2">
-          <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{player.role}</span>
-          <span className="w-0.5 h-0.5 rounded-full bg-white/10" />
-          <span className="text-[8px] font-mono font-bold text-gray-500">₹{player.price.toFixed(1)}M</span>
+          <span className="text-[7px] font-black text-muted uppercase tracking-widest">{player.role}</span>
+          <span className="w-0.5 h-0.5 rounded-full bg-border" />
+          <span className="text-[8px] font-mono font-bold text-muted">₹{player.price.toFixed(1)}M</span>
         </div>
       </div>
 
-      <div 
+      <div
         className={cn(
-          "w-6 h-6 rounded-lg flex items-center justify-center transition-all bg-white/5 group-hover:scale-110",
-          isSelected ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 group-hover:text-blue-400"
+          "w-6 h-6 rounded-lg flex items-center justify-center transition-all bg-surface-hover shrink-0",
+          !disabled && "group-hover:scale-110",
+          isSelected
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : disabled
+            ? "text-muted/40"
+            : "text-muted group-hover:text-primary group-hover:bg-primary-tint"
         )}
       >
         {isSelected ? (
           <Check size={12} strokeWidth={4} />
+        ) : disabled ? (
+          <Lock size={11} />
         ) : (
           <Plus size={12} />
         )}
       </div>
 
-      <div 
-        style={{ backgroundColor: brand.accentColor }} 
-        className="absolute left-0 top-0 bottom-0 w-1 opacity-80" 
+      <div
+        style={{ backgroundColor: brand.accentColor }}
+        className={cn("absolute left-0 top-0 bottom-0 w-1", disabled && !isSelected ? "opacity-30" : "opacity-80")}
       />
     </button>
   );

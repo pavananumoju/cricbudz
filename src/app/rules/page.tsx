@@ -1,80 +1,85 @@
 import React from 'react';
 import { Shield, Info, CheckCircle2 } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 export default function RulesPage() {
   const scoringRules = [
-    { subject: "1 Run", points: "1" },
-    { subject: "1 Wicket", points: "10" },
-    { subject: "1 Runout", points: "5" },
-    { subject: "Direct Hit", points: "10" },
-    { subject: "1 Catch", points: "5" },
-    { subject: "1 Stumping", points: "5" },
-    { subject: "1 Dot Ball", points: "1" },
-    { subject: "Half Century", points: "5" },
-    { subject: "Century", points: "10" },
-    { subject: "3 Wicket Haul", points: "10" },
-    { subject: "5 Wicket Haul", points: "20" },
-    { subject: "Man of the Match", points: "10" },
+    { subject: '1 Run', points: '1' },
+    { subject: '1 Wicket', points: '10' },
+    { subject: '1 Runout', points: '5' },
+    { subject: 'Direct Hit', points: '10' },
+    { subject: '1 Catch', points: '5' },
+    { subject: '1 Stumping', points: '5' },
+    { subject: '1 Dot Ball', points: '1' },
+    { subject: 'Half Century', points: '5' },
+    { subject: 'Century', points: '10' },
+    { subject: '3 Wicket Haul', points: '10' },
+    { subject: '5 Wicket Haul', points: '20' },
+    { subject: 'Man of the Match', points: '10' },
   ];
 
+  const principles = [
+    { icon: CheckCircle2, color: 'success', title: 'Build Your Squad', desc: 'Select exactly 3 players per match, with at least 1 from each franchise.' },
+    { icon: Info, color: 'primary', title: 'Pick Your MVP', desc: 'One player earns double (2x) points for everything they do in the match.' },
+    { icon: Shield, color: 'accent', title: 'Lock Deadline', desc: 'Squads lock 30 minutes before the official match start. No edits after.' },
+  ] as const;
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      <header className="mb-12">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Fantasy Game Rules</h1>
-        <p className="text-gray-500">Understand how points are calculated and how to play.</p>
+    <div className="px-4 space-y-8 pb-4 lg:max-w-3xl lg:mx-auto">
+      <header className="space-y-2 pt-2">
+        <h1 className="text-3xl font-display font-black tracking-tighter uppercase italic leading-none">
+          Arena <span className="text-primary">Rules</span>
+        </h1>
+        <p className="text-muted text-sm font-medium">How points are calculated and how to dominate the league.</p>
       </header>
 
-      <div className="grid gap-12">
-        {/* Core Principles */}
-        <section className="grid md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <CheckCircle2 className="w-8 h-8 text-green-500 mb-4" />
-            <h3 className="font-bold mb-2">Build Your Squad</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">Select exactly 3 players for each match. You must pick at least 1 player from each of the two teams.</p>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <Info className="w-8 h-8 text-blue-500 mb-4" />
-            <h3 className="font-bold mb-2">Pick Your MVP</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">Designate one player as your MVP. The MVP earns double (2x) the points they score in the match.</p>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <Shield className="w-8 h-8 text-orange-500 mb-4" />
-            <h3 className="font-bold mb-2">Lock Deadline</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">Squads are locked 30 minutes before the official match start time. No edits are allowed after the deadline.</p>
-          </div>
-        </section>
+      <section className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-3">
+        {principles.map((p) => (
+          <Card key={p.title} className="p-5 flex items-start gap-4 sm:flex-col sm:items-start">
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                p.color === 'success' ? 'bg-success-tint text-success' : p.color === 'primary' ? 'bg-primary-tint text-primary' : 'bg-accent-tint text-accent'
+              }`}
+            >
+              <p.icon size={19} />
+            </div>
+            <div>
+              <h3 className="font-display font-black text-sm uppercase tracking-tight italic">{p.title}</h3>
+              <p className="text-xs text-muted leading-relaxed font-medium mt-1">{p.desc}</p>
+            </div>
+          </Card>
+        ))}
+      </section>
 
-        {/* Scoring Table */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-xl font-bold">Scoring System</h2>
-            <div className="h-px flex-1 bg-gray-100"></div>
-          </div>
-          
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 border-b text-[10px] text-gray-400 uppercase font-bold tracking-widest">
-                  <th className="px-6 py-4">Event</th>
-                  <th className="px-6 py-4 text-right">Points</th>
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <h2 className="text-lg font-display font-black uppercase tracking-tight italic">Scoring System</h2>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <Card className="overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-surface-hover border-b border-border text-[9px] text-muted uppercase font-black tracking-widest">
+                <th className="px-4 py-3">Event</th>
+                <th className="px-4 py-3 text-right">Points</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {scoringRules.map((rule, idx) => (
+                <tr key={idx}>
+                  <td className="px-4 py-3 text-xs font-black uppercase tracking-tight italic">{rule.subject}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="inline-flex items-center justify-center min-w-[36px] px-2.5 py-1 bg-primary-tint text-primary rounded-lg text-[11px] font-black">
+                      +{rule.points}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {scoringRules.map((rule, idx) => (
-                  <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-700">{rule.subject}</td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="inline-flex items-center justify-center min-w-[32px] px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold font-mono">
-                        +{rule.points}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </section>
     </div>
   );
 }

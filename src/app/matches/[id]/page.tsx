@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ArrowLeft, Trophy, ChevronUp, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import { getMatchById, getPlayersByTeams, saveUserSquad, getUserSquads } from '@/services/dataService';
-import { Player, Match, UserSquad } from '@/types';
+import { Player, Match } from '@/types';
 import { cn } from '@/lib/utils';
+import { useDev } from '@/context/DevContext';
+import { Sheet } from '@/components/ui/Sheet';
 
-// Component Imports
 import PlayerCard from './_components/PlayerCard';
 import SelectedSlots from './_components/SelectedSlots';
 import SubmissionControl from './_components/SubmissionControl';
@@ -16,30 +17,31 @@ import SubmissionControl from './_components/SubmissionControl';
 const SQUAD_TARGET_SIZE = 3;
 
 const TEAM_BRANDS: Record<string, { imageId: string; textClass: string; bgClass: string; borderClass: string; accentColor: string }> = {
-  MI: { imageId: 'mi', textClass: 'text-blue-400', bgClass: 'bg-blue-500/10', borderClass: 'border-blue-500/30', accentColor: '#004ba0' },
-  CSK: { imageId: 'csk', textClass: 'text-yellow-400', bgClass: 'bg-yellow-500/10', borderClass: 'border-yellow-500/30', accentColor: '#fdb913' },
-  RCB: { imageId: 'rcb', textClass: 'text-red-500', bgClass: 'bg-red-500/10', borderClass: 'border-red-500/30', accentColor: '#d11d26' },
-  SRH: { imageId: 'srh', textClass: 'text-orange-500', bgClass: 'bg-orange-500/10', borderClass: 'border-orange-500/30', accentColor: '#f26522' },
-  DC: { imageId: 'dc', textClass: 'text-blue-600', bgClass: 'bg-blue-600/10', borderClass: 'border-blue-600/30', accentColor: '#000080' },
-  KKR: { imageId: 'kkr', textClass: 'text-purple-400', bgClass: 'bg-purple-500/10', borderClass: 'border-purple-500/30', accentColor: '#3a225d' },
-  PBKS: { imageId: 'pbks', textClass: 'text-rose-400', bgClass: 'bg-rose-500/10', borderClass: 'border-rose-500/30', accentColor: '#ed1b24' },
-  RR: { imageId: 'rr', textClass: 'text-pink-400', bgClass: 'bg-pink-500/10', borderClass: 'border-pink-500/30', accentColor: '#ea1a85' },
-  LSG: { imageId: 'lsg', textClass: 'text-cyan-400', bgClass: 'bg-cyan-500/10', borderClass: 'border-cyan-500/30', accentColor: '#1c1c1c' },
-  GT: { imageId: 'gt', textClass: 'text-slate-200', bgClass: 'bg-slate-500/10', borderClass: 'border-slate-500/30', accentColor: '#1b2133' },
+  MI: { imageId: 'mi', textClass: 'text-blue-600 dark:text-blue-400', bgClass: 'bg-blue-500/10', borderClass: 'border-blue-500/30', accentColor: '#004ba0' },
+  CSK: { imageId: 'csk', textClass: 'text-amber-600 dark:text-amber-400', bgClass: 'bg-amber-500/10', borderClass: 'border-amber-500/30', accentColor: '#fdb913' },
+  RCB: { imageId: 'rcb', textClass: 'text-red-600 dark:text-red-400', bgClass: 'bg-red-500/10', borderClass: 'border-red-500/30', accentColor: '#d11d26' },
+  SRH: { imageId: 'srh', textClass: 'text-orange-600 dark:text-orange-400', bgClass: 'bg-orange-500/10', borderClass: 'border-orange-500/30', accentColor: '#f26522' },
+  DC: { imageId: 'dc', textClass: 'text-indigo-600 dark:text-indigo-400', bgClass: 'bg-indigo-500/10', borderClass: 'border-indigo-500/30', accentColor: '#000080' },
+  KKR: { imageId: 'kkr', textClass: 'text-purple-600 dark:text-purple-400', bgClass: 'bg-purple-500/10', borderClass: 'border-purple-500/30', accentColor: '#3a225d' },
+  PBKS: { imageId: 'pbks', textClass: 'text-rose-600 dark:text-rose-400', bgClass: 'bg-rose-500/10', borderClass: 'border-rose-500/30', accentColor: '#ed1b24' },
+  RR: { imageId: 'rr', textClass: 'text-pink-600 dark:text-pink-400', bgClass: 'bg-pink-500/10', borderClass: 'border-pink-500/30', accentColor: '#ea1a85' },
+  LSG: { imageId: 'lsg', textClass: 'text-cyan-600 dark:text-cyan-400', bgClass: 'bg-cyan-500/10', borderClass: 'border-cyan-500/30', accentColor: '#1c1c1c' },
+  GT: { imageId: 'gt', textClass: 'text-slate-600 dark:text-slate-300', bgClass: 'bg-slate-500/10', borderClass: 'border-slate-500/30', accentColor: '#1b2133' },
 };
 
 function getTeamBrand(teamShortName: string) {
-  return TEAM_BRANDS[teamShortName.toUpperCase()] || { 
-    imageId: '152655', 
-    textClass: 'text-blue-400', 
-    bgClass: 'bg-blue-500/10', 
-    borderClass: 'border-blue-500/30',
-    accentColor: '#3b82f6'
+  return TEAM_BRANDS[teamShortName.toUpperCase()] || {
+    imageId: '152655',
+    textClass: 'text-primary',
+    bgClass: 'bg-primary/10',
+    borderClass: 'border-primary/30',
+    accentColor: '#4f46e5',
   };
 }
 
 export default function SquadDraftPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const [id, setId] = useState<string | null>(null);
+  const { dateOverride } = useDev();
   const [match, setMatch] = useState<Match | null>(null);
   const [team1Players, setTeam1Players] = useState<Player[]>([]);
   const [team2Players, setTeam2Players] = useState<Player[]>([]);
@@ -47,29 +49,29 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [mvpId, setMvpId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [recommending, setRecommending] = useState(false);
-  const [uiFeedback, setUiFeedback] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    params.then((p) => setId(p.id));
+  }, [params]);
+
+  useEffect(() => {
+    if (!id) return;
     const fetchData = async () => {
-      const [matchData, allUserSquads] = await Promise.all([
-        getMatchById(id),
-        getUserSquads()
-      ]);
+      const [matchData, allUserSquads] = await Promise.all([getMatchById(id), getUserSquads()]);
 
       if (matchData) {
         setMatch(matchData);
         const playersByTeams = await getPlayersByTeams(matchData.team1, matchData.team2);
-        const t1 = playersByTeams.filter(p => p.team.toUpperCase() === matchData.team1.toUpperCase());
-        const t2 = playersByTeams.filter(p => p.team.toUpperCase() === matchData.team2.toUpperCase());
+        const t1 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team1.toUpperCase());
+        const t2 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team2.toUpperCase());
         setTeam1Players(t1);
         setTeam2Players(t2);
 
-        // Check if there is an existing squad for this match
-        const existingSquad = allUserSquads.find(s => s.matchId === id);
+        const existingSquad = allUserSquads.find((s) => s.matchId === id);
         if (existingSquad) {
-          const selected = playersByTeams.filter(p => existingSquad.players.includes(p.id));
+          const selected = playersByTeams.filter((p) => existingSquad.players.includes(p.id));
           setSelectedPlayers(selected);
           setMvpId(existingSquad.mvpId);
         }
@@ -79,53 +81,30 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     fetchData();
   }, [id]);
 
-  const getAiRecommendation = async () => {
-    setRecommending(true);
-    setUiFeedback(null);
-    try {
-      const res = await fetch('/api/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          players: [...team1Players, ...team2Players],
-          matchInfo: `${match?.team1} vs ${match?.team2}`
-        }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      // Apply recommendation
-      const allPlayers = [...team1Players, ...team2Players];
-      const recommended = allPlayers.filter(p => data.selectedPlayerIds.includes(p.id));
-      setSelectedPlayers(recommended);
-      setMvpId(data.mvpId);
-      setUiFeedback({ type: 'info', message: `AI Suggested: ${data.reasoning}` });
-    } catch (error: any) {
-      console.error(error);
-      setUiFeedback({ type: 'error', message: error.message || 'AI Recommendation failed.' });
-    } finally {
-      setRecommending(false);
-    }
+  const getEffectiveNow = () => {
+    if (!dateOverride) return new Date();
+    const now = new Date();
+    const timeStr = now.toISOString().split('T')[1];
+    return new Date(`${dateOverride}T${timeStr}`);
   };
+
+  const isLocked = match ? new Date(match.date).getTime() - getEffectiveNow().getTime() < 30 * 60 * 1000 : false;
 
   const selectPlayer = (player: Player) => {
     if (isLocked) return;
-    setUiFeedback(null);
-    if (selectedPlayers.find(p => p.id === player.id)) {
+    if (selectedPlayers.find((p) => p.id === player.id)) {
       removePlayer(player.id);
       return;
     }
     if (selectedPlayers.length >= SQUAD_TARGET_SIZE) {
-      setUiFeedback({ type: 'error', message: 'Trio slots are full. Remove a player first.' });
+      toast.error('Trio slots are full. Remove a player first.');
       return;
     }
     if (selectedPlayers.length === SQUAD_TARGET_SIZE - 1) {
-      const currentTeams = selectedPlayers.map(p => p.team.toUpperCase());
+      const currentTeams = selectedPlayers.map((p) => p.team.toUpperCase());
       if (currentTeams[0] === currentTeams[1] && currentTeams[0] === player.team.toUpperCase()) {
-        setUiFeedback({ 
-          type: 'error', 
-          message: `Selection Blocked! You must add a player from ${player.team.toUpperCase() === match?.team1.toUpperCase() ? match?.team2 : match?.team1} to meet the dual-franchise rule.` 
-        });
+        const otherTeam = player.team.toUpperCase() === match?.team1.toUpperCase() ? match?.team2 : match?.team1;
+        toast.error(`Add a player from ${otherTeam} to meet the dual-franchise rule.`);
         return;
       }
     }
@@ -134,52 +113,73 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
 
   const removePlayer = (id: string) => {
     if (isLocked) return;
-    setSelectedPlayers(selectedPlayers.filter(p => p.id !== id));
+    setSelectedPlayers(selectedPlayers.filter((p) => p.id !== id));
     if (mvpId === id) setMvpId(null);
-    setUiFeedback(null);
   };
 
-  const isLocked = match ? new Date(match.date).getTime() - Date.now() < 30 * 60 * 1000 : false;
+  const handleSetMvp = (playerId: string) => {
+    if (isLocked) return;
+    setMvpId(playerId);
+  };
 
   const checkStatusDetails = (): { canSubmit: boolean; message: string } => {
     if (isLocked) {
-      return { canSubmit: false, message: 'This arena is now locked. No further modifications to your Trio Draft are permitted.' };
+      return { canSubmit: false, message: 'This arena is locked. No further changes are permitted.' };
     }
     if (selectedPlayers.length < SQUAD_TARGET_SIZE) {
       return { canSubmit: false, message: `Add ${SQUAD_TARGET_SIZE - selectedPlayers.length} more player(s) to complete your trio.` };
     }
-    if (new Set(selectedPlayers.map(p => p.team.toUpperCase())).size < 2) {
-      return { canSubmit: false, message: 'Invalid selection rule. Your trio must include at least 1 player from each franchise.' };
+    if (new Set(selectedPlayers.map((p) => p.team.toUpperCase())).size < 2) {
+      return { canSubmit: false, message: 'Your trio must include at least 1 player from each franchise.' };
     }
     if (!mvpId) {
-      return { canSubmit: false, message: 'Nominate your Trio MVP by highlighting the lightning bolt icon on your selections.' };
+      return { canSubmit: false, message: 'Nominate your Trio MVP with the lightning bolt icon.' };
     }
-    return { canSubmit: true, message: 'Your Trio Draft looks solid! Ready to deploy to the live tracking boards.' };
+    return { canSubmit: true, message: 'Your Trio Draft looks solid! Ready to deploy.' };
   };
 
   const handleSave = async () => {
     const status = checkStatusDetails();
-    if (!status.canSubmit) return;
+    if (!status.canSubmit || !id) return;
     setSaving(true);
     try {
       await saveUserSquad({
         matchId: id,
-        players: selectedPlayers.map(p => p.id),
+        players: selectedPlayers.map((p) => p.id),
         mvpId: mvpId!,
       });
+      toast.success('Trio locked in!');
       router.push('/dashboard');
     } catch (error) {
       console.error(error);
-      setUiFeedback({ type: 'error', message: 'Network write timeout: Failed to lock choices into Firestore.' });
+      toast.error('Failed to save your squad. Try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading || !match) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!match) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center px-6">
+        <Trophy className="w-12 h-12 text-muted/40 mb-4" />
+        <h3 className="text-lg font-display font-black uppercase italic text-muted mb-2">Match Not Found</h3>
+        <p className="text-muted max-w-xs mx-auto text-sm leading-relaxed mb-6">
+          This fixture doesn&apos;t exist or hasn&apos;t been synced yet.
+        </p>
+        <button
+          onClick={() => router.push('/matches')}
+          className="bg-foreground text-background px-5 py-2.5 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+        >
+          Back to Fixtures
+        </button>
       </div>
     );
   }
@@ -189,178 +189,175 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const team2Brand = getTeamBrand(match.team2);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0b] text-white font-sans pb-16 selection:bg-blue-500/30">
-      
-      {/* STICKY HEADER - MUCH MORE COMPACT */}
-      <div className="sticky top-0 z-40 bg-[#0a0a0b]/90 backdrop-blur-md border-b border-white/5 shadow-xl">
-        <div className="container mx-auto px-4 py-3 max-w-7xl">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => router.back()} 
-                className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-all group"
-              >
-                <ArrowLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
-              </button>
-              <div>
-                <h2 className="font-display font-black text-xl uppercase italic tracking-tighter leading-none">
-                  <span className={team1Brand.textClass}>{match.team1}</span> 
-                  <span className="text-gray-600 px-2">VS</span> 
-                  <span className={team2Brand.textClass}>{match.team2}</span>
-                </h2>
-                <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase mt-0.5">Trio Selection Arena</p>
-              </div>
+    <div className="min-h-screen bg-background text-foreground font-sans pb-28 lg:pb-10 selection:bg-primary/30">
+      <div className="sticky top-0 z-40 bg-surface/95 backdrop-blur-xl border-b border-border pt-safe">
+        <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-3 flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="w-9 h-9 rounded-xl bg-surface-hover flex items-center justify-center shrink-0 active:scale-95 transition-transform"
+          >
+            <ArrowLeft size={17} />
+          </button>
+          <div className="flex-1 min-w-0 text-center">
+            <h2 className="font-display font-black text-sm lg:text-base uppercase italic tracking-tight truncate">
+              <span className={team1Brand.textClass}>{match.team1}</span>
+              <span className="text-muted px-1.5">vs</span>
+              <span className={team2Brand.textClass}>{match.team2}</span>
+            </h2>
+            <p className="text-[9px] text-muted font-bold tracking-widest uppercase">Trio Selection</p>
+          </div>
+          {isLocked ? (
+            <div className="flex items-center gap-1 shrink-0 text-danger">
+              <Lock size={13} />
+              <span className="text-[10px] font-display font-black uppercase tracking-tight">Locked</span>
             </div>
-
-            {uiFeedback && (
-              <motion.div 
-                initial={{ opacity: 0, y: -5 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                className={cn(
-                  "hidden md:block px-4 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md",
-                  uiFeedback.type === 'error' ? "bg-red-500/10 border border-red-500/20 text-red-400" : "bg-blue-500/10 border border-blue-500/20 text-blue-400"
-                )}
-              >
-                {uiFeedback.message}
-              </motion.div>
-            )}
-
-            <div className="text-right">
-              <span className="text-[10px] font-mono font-black text-gray-500 uppercase tracking-widest leading-none">Picks</span>
-              <p className="text-lg font-display font-black text-blue-400 italic leading-none mt-1">{selectedPlayers.length} / 3</p>
+          ) : (
+            <div className="text-right shrink-0 w-11">
+              <p className="text-[8px] font-mono font-black text-muted uppercase leading-none">Picks</p>
+              <p className="text-sm font-display font-black text-primary italic leading-none mt-1">{selectedPlayers.length}/3</p>
+            </div>
+          )}
+        </div>
+        {isLocked && (
+          <div className="bg-danger-tint border-t border-danger/20">
+            <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
+              <Lock size={11} className="text-danger shrink-0" />
+              <p className="text-[9px] font-bold text-danger uppercase tracking-wide">
+                Arena locked — no further changes permitted
+              </p>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* MAIN CONTENT GRID */}
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* PLAYERS COLUMN - LEFT AND CENTER */}
-          <div className="lg:col-span-8 order-2 lg:order-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
-              {/* Team 1 Pool */}
-              <div className="space-y-4">
-                <div 
-                  style={{ 
-                    borderLeft: `3px solid ${team1Brand.accentColor}`,
-                    background: `linear-gradient(to right, ${team1Brand.accentColor}10, transparent)`
-                  }}
-                  className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between sticky top-[80px] z-20 backdrop-blur-xl"
-                >
-                  <h3 className={cn("font-display font-black text-xl uppercase tracking-tight italic", team1Brand.textClass)}>
-                    {match.team1} Pool
-                  </h3>
-                  <span className="text-[11px] font-mono font-black opacity-40">{team1Players.length} Players</span>
-                </div>
-                <div className="space-y-2">
-                  {team1Players.map((player) => (
-                    <PlayerCard 
-                      key={player.id}
-                      player={player}
-                      brand={team1Brand}
-                      isSelected={!!selectedPlayers.find(p => p.id === player.id)}
-                      onSelect={() => selectPlayer(player)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Team 2 Pool */}
-              <div className="space-y-4">
-                <div 
-                  style={{ 
-                    borderLeft: `3px solid ${team2Brand.accentColor}`,
-                    background: `linear-gradient(to right, ${team2Brand.accentColor}10, transparent)`
-                  }}
-                  className="p-4 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between sticky top-[80px] z-20 backdrop-blur-xl"
-                >
-                  <h3 className={cn("font-display font-black text-xl uppercase tracking-tight italic", team2Brand.textClass)}>
-                    {match.team2} Pool
-                  </h3>
-                  <span className="text-[11px] font-mono font-black opacity-40">{team2Players.length} Players</span>
-                </div>
-                <div className="space-y-2">
-                  {team2Players.map((player) => (
-                    <PlayerCard 
-                      key={player.id}
-                      player={player}
-                      brand={team2Brand}
-                      isSelected={!!selectedPlayers.find(p => p.id === player.id)}
-                      onSelect={() => selectPlayer(player)}
-                    />
-                  ))}
-                </div>
-              </div>
-
+      <main className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-4">
+        <div className="grid grid-cols-2 lg:grid-cols-[1fr_1fr_340px] gap-3 lg:gap-5">
+          <div className="space-y-2">
+            <div
+              style={{ borderLeft: `3px solid ${team1Brand.accentColor}` }}
+              className="px-3 py-2.5 rounded-xl bg-surface border border-border flex items-center justify-between"
+            >
+              <span className={cn('font-display font-black text-[11px] uppercase italic truncate', team1Brand.textClass)}>{match.team1}</span>
+              <span className="text-[9px] font-mono font-black text-muted shrink-0">{team1Players.length}</span>
+            </div>
+            <div className="space-y-1.5">
+              {team1Players.map((player) => (
+                <PlayerCard
+                  key={player.id}
+                  player={player}
+                  brand={team1Brand}
+                  isSelected={!!selectedPlayers.find((p) => p.id === player.id)}
+                  disabled={isLocked}
+                  onSelect={() => selectPlayer(player)}
+                />
+              ))}
             </div>
           </div>
 
-          {/* STICKY SIDEBAR - RIGHT */}
-          <div className="lg:col-span-4 order-1 lg:order-2">
-            <div className="lg:sticky lg:top-[80px] space-y-4">
-              
-              {/* Entire Draft Management Card */}
-              <div className="bg-white/5 border border-white/10 rounded-[2rem] overflow-hidden backdrop-blur-sm">
-                <div className="p-6">
-                  <h3 className="font-display font-black text-sm uppercase tracking-widest italic text-gray-400 mb-6 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    Current Trio Draft
-                  </h3>
-                  
-                  <div className="mb-6">
-                    <SelectedSlots 
-                      selectedPlayers={selectedPlayers}
-                      mvpId={mvpId}
-                      onRemove={removePlayer}
-                      onSetMvp={setMvpId}
-                      getTeamBrand={getTeamBrand}
-                    />
-                  </div>
-
-                  <SubmissionControl 
-                    canSubmit={canSubmit}
-                    statusMessage={statusMessage}
-                    saving={saving}
-                    isLocked={isLocked}
-                    recommending={recommending}
-                    selectedPlayers={selectedPlayers}
-                    mvpId={mvpId}
-                    onSave={handleSave}
-                    onAiRecommend={getAiRecommendation}
-                  />
-                </div>
-              </div>
-
-              {/* Tips/Rules Card */}
-              <div className="p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10 hidden lg:block">
-                <h4 className="text-[10px] font-mono font-black text-blue-400 uppercase tracking-widest mb-2">Draft Mastery Tip</h4>
-                <p className="text-[11px] text-blue-200/60 leading-relaxed italic">
-                  Nominate your Trio MVP wisely. That player earns 2x points for every performance metric. 
-                  Balanced selections across both teams minimize risk.
-                </p>
-              </div>
-
-              {/* Mobile Feedback */}
-              {uiFeedback && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className={cn(
-                    "md:hidden p-4 rounded-2xl text-xs font-bold text-center",
-                    uiFeedback.type === 'error' ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                  )}
-                >
-                  {uiFeedback.message}
-                </motion.div>
-              )}
+          <div className="space-y-2">
+            <div
+              style={{ borderLeft: `3px solid ${team2Brand.accentColor}` }}
+              className="px-3 py-2.5 rounded-xl bg-surface border border-border flex items-center justify-between"
+            >
+              <span className={cn('font-display font-black text-[11px] uppercase italic truncate', team2Brand.textClass)}>{match.team2}</span>
+              <span className="text-[9px] font-mono font-black text-muted shrink-0">{team2Players.length}</span>
+            </div>
+            <div className="space-y-1.5">
+              {team2Players.map((player) => (
+                <PlayerCard
+                  key={player.id}
+                  player={player}
+                  brand={team2Brand}
+                  isSelected={!!selectedPlayers.find((p) => p.id === player.id)}
+                  disabled={isLocked}
+                  onSelect={() => selectPlayer(player)}
+                />
+              ))}
             </div>
           </div>
 
+          <aside className="hidden lg:block">
+            <div className="sticky top-24 bg-surface border border-border rounded-2xl p-4">
+              <h3 className="font-display font-black text-sm uppercase italic tracking-tight mb-3">
+                Your Trio
+              </h3>
+              <SelectedSlots
+                selectedPlayers={selectedPlayers}
+                mvpId={mvpId}
+                onRemove={removePlayer}
+                onSetMvp={handleSetMvp}
+                getTeamBrand={getTeamBrand}
+                locked={isLocked}
+              />
+              <div className="mt-4">
+                <SubmissionControl
+                  canSubmit={canSubmit}
+                  statusMessage={statusMessage}
+                  saving={saving}
+                  isLocked={isLocked}
+                  selectedPlayers={selectedPlayers}
+                  mvpId={mvpId}
+                  onSave={handleSave}
+                />
+              </div>
+            </div>
+          </aside>
         </div>
       </main>
+
+      <button
+        onClick={() => setSheetOpen(true)}
+        className={cn(
+          'fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl border-t pb-safe transition-colors lg:hidden',
+          isLocked ? 'bg-danger-tint/90 border-danger/20' : 'bg-surface/95 border-border active:bg-surface-hover'
+        )}
+      >
+        <div className="max-w-md mx-auto px-4 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            {isLocked ? (
+              <Lock size={14} className="text-danger" />
+            ) : (
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className={cn('w-2 h-2 rounded-full', selectedPlayers[i] ? 'bg-primary' : 'bg-border')}
+                  />
+                ))}
+              </div>
+            )}
+            <span className={cn('text-xs font-display font-black uppercase tracking-tight', isLocked && 'text-danger')}>
+              {isLocked ? 'Arena Locked' : `${selectedPlayers.length}/3 Selected ${mvpId ? '· MVP Set' : ''}`}
+            </span>
+          </div>
+          <span className={cn('text-xs font-display font-black flex items-center gap-1', isLocked ? 'text-danger' : 'text-primary')}>
+            {isLocked ? 'View' : 'Review'}
+            <ChevronUp size={15} />
+          </span>
+        </div>
+      </button>
+
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Your Trio">
+        <SelectedSlots
+          selectedPlayers={selectedPlayers}
+          mvpId={mvpId}
+          onRemove={removePlayer}
+          onSetMvp={handleSetMvp}
+          getTeamBrand={getTeamBrand}
+          locked={isLocked}
+        />
+        <div className="mt-4">
+          <SubmissionControl
+            canSubmit={canSubmit}
+            statusMessage={statusMessage}
+            saving={saving}
+            isLocked={isLocked}
+            selectedPlayers={selectedPlayers}
+            mvpId={mvpId}
+            onSave={handleSave}
+          />
+        </div>
+      </Sheet>
     </div>
   );
 }

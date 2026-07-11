@@ -1,14 +1,90 @@
 @import "tailwindcss";
 
+/* Enables `dark:` utilities when a `.dark` class is present on an ancestor
+   (set by ThemeContext), instead of only following prefers-color-scheme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted-foreground);
+  --color-border: var(--border-color);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-tint: var(--primary-tint);
+
+  --color-accent: var(--accent);
+  --color-accent-tint: var(--accent-tint);
+
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+}
+
 :root {
-  --background: #0a0a0b;
-  --foreground: #ffffff;
+  color-scheme: light;
+
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --foreground: #0f172a;
+  --muted-foreground: #64748b;
+  --border-color: #e2e8f0;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-foreground: #ffffff;
+  --primary-tint: #eef2ff;
+
+  --accent: #f59e0b;
+  --accent-tint: #fffbeb;
+
+  --success: #10b981;
+  --success-tint: #ecfdf5;
+  --danger: #ef4444;
+  --danger-tint: #fef2f2;
+  --warning: #f59e0b;
+  --warning-tint: #fffbeb;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0b0f19;
+  --surface: #121826;
+  --surface-hover: #1a2234;
+  --foreground: #f1f5f9;
+  --muted-foreground: #94a3b8;
+  --border-color: #232b3d;
+
+  --primary: #818cf8;
+  --primary-hover: #a5b4fc;
+  --primary-foreground: #0b0f19;
+  --primary-tint: #1e1b4b;
+
+  --accent: #fbbf24;
+  --accent-tint: #451a03;
+
+  --success: #34d399;
+  --success-tint: #052e21;
+  --danger: #f87171;
+  --danger-tint: #450a0a;
+  --warning: #fbbf24;
+  --warning-tint: #451a03;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .font-display {
@@ -17,4 +93,24 @@ body {
 
 .font-mono {
   font-family: var(--font-mono);
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
 }
