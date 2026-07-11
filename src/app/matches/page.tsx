@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMatches } from '@/services/dataService';
 import { Match } from '@/types';
@@ -38,6 +38,7 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const { getEffectiveNow } = useDev();
+  const currentMatchRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -48,6 +49,16 @@ export default function MatchesPage() {
     };
     fetchMatches();
   }, []);
+
+  // Land the user on today's fixtures (or the next upcoming one) instead of
+  // making them scroll down from the oldest match every time.
+  useEffect(() => {
+    if (loading || matches.length === 0 || !currentMatchRef.current) return;
+    currentMatchRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }, [loading, matches]);
+
+  const todayStr = getEffectiveNow().toISOString().slice(0, 10);
+  const currentMatchIndex = matches.findIndex((m) => !!m.date && m.date.slice(0, 10) >= todayStr);
 
   if (loading) {
     return (
@@ -92,6 +103,7 @@ export default function MatchesPage() {
               return (
                 <motion.div
                   key={match.id}
+                  ref={idx === currentMatchIndex ? currentMatchRef : undefined}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(idx, 6) * 0.04 }}
