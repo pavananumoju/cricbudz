@@ -85,7 +85,7 @@ export default function LeaderboardPage() {
         </button>
         <div className="text-center min-w-0">
           <div className="flex items-center justify-center flex-wrap gap-x-2 gap-y-1">
-            <p className="font-display font-black text-base uppercase italic tracking-tight truncate min-w-0">
+            <p className="font-display font-black text-base uppercase italic tracking-tight whitespace-nowrap min-w-0 pr-0.5">
               {weekNumber !== null ? `Week ${weekNumber}` : 'This Week'}
             </p>
             {isCurrentWeek && (
