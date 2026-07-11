@@ -10,6 +10,13 @@ export const TEST_MATCH_LOCKED_ID = 'e2e-match-locked';
 // Separate from TEST_MATCH_ID so visibility.spec.ts's squad writes never
 // collide with draft.spec.ts's squad for the same seeded test user.
 export const TEST_MATCH_VISIBILITY_ID = 'e2e-match-visibility';
+// Pre-scored (seeded with totalPoints directly, bypassing the real
+// finalize-match API which calls the real RapidAPI — not something E2E
+// tests should hit) so leaderboard.spec.ts can exercise the real Firestore
+// query + rules + rendering pipeline without a live scorecard fetch.
+export const TEST_MATCH_SCORED_ID = 'e2e-match-scored';
+export const TEST_USER_SCORE = 50;
+export const TEST_USER_2_SCORE = 30;
 
 export const TEST_PLAYERS = [
   { id: 'e2e-p1', name: 'Test Batter One', team: 'SRH', role: 'BATSMAN', price: 9 },

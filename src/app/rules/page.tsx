@@ -1,26 +1,14 @@
 import React from 'react';
 import { Shield, Info, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { SCORING_RULES_DISPLAY, MVP_MULTIPLIER } from '@/lib/scoringRules';
 
 export default function RulesPage() {
-  const scoringRules = [
-    { subject: '1 Run', points: '1' },
-    { subject: '1 Wicket', points: '10' },
-    { subject: '1 Runout', points: '5' },
-    { subject: 'Direct Hit', points: '10' },
-    { subject: '1 Catch', points: '5' },
-    { subject: '1 Stumping', points: '5' },
-    { subject: '1 Dot Ball', points: '1' },
-    { subject: 'Half Century', points: '5' },
-    { subject: 'Century', points: '10' },
-    { subject: '3 Wicket Haul', points: '10' },
-    { subject: '5 Wicket Haul', points: '20' },
-    { subject: 'Man of the Match', points: '10' },
-  ];
+  const scoringRules = SCORING_RULES_DISPLAY;
 
   const principles = [
     { icon: CheckCircle2, color: 'success', title: 'Build Your Squad', desc: 'Select exactly 3 players per match, with at least 1 from each franchise.' },
-    { icon: Info, color: 'primary', title: 'Pick Your MVP', desc: 'One player earns double (2x) points for everything they do in the match.' },
+    { icon: Info, color: 'primary', title: 'Pick Your MVP', desc: `One player earns ${MVP_MULTIPLIER}x points for everything they do in the match.` },
     { icon: Shield, color: 'accent', title: 'Lock Deadline', desc: 'Squads lock 30 minutes before the official match start. No edits after.' },
   ] as const;
 

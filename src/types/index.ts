@@ -30,6 +30,12 @@ export interface Match {
   tossStatus?: string;
   venue: string;
   matchDesc?: string;
+  // Set by POST /api/finalize-match once an admin finalizes scoring.
+  scoring?: {
+    finalizedAt: string;
+    motmPlayerId: string | null;
+    playerPoints: Record<string, number>;
+  };
 }
 
 export interface UserSquad {

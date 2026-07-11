@@ -59,3 +59,7 @@ export async function getTeamPlayers(
     `teams/v1/${teamId}/players`
   );
 }
+
+export async function getMatchScorecard(matchId: string) {
+  return rapidFetch(`mcenter/v1/${matchId}/scard`);
+}

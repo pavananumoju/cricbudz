@@ -48,7 +48,8 @@ ipl-fantasy-arena/
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   └── sync/                 # Admin-only ETL: Cricbuzz -> Firestore (matches + players)
+│   │   │   ├── sync/                 # Admin-only ETL: Cricbuzz -> Firestore (matches + players)
+│   │   │   └── finalize-match/       # Admin-only: fetch scorecard, score every squad for a match
 │   │   │
 │   │   ├── admin/
 │   │   │   └── page.tsx              # Dev Control Center: date override, submission visibility toggle
@@ -57,7 +58,7 @@ ipl-fantasy-arena/
 │   │   │   └── page.tsx              # Today's Arena, quick links, other drafts (with delete)
 │   │   │
 │   │   ├── leaderboard/
-│   │   │   └── page.tsx              # Global rankings (still mock data — not wired to real scores yet)
+│   │   │   └── page.tsx              # Weekly (Mon-Sun) standings, live-computed, with week navigation
 │   │   │
 │   │   ├── matches/
 │   │   │   ├── [id]/
@@ -66,7 +67,8 @@ ipl-fantasy-arena/
 │   │   │   │   │   ├── SelectedSlots.tsx     # Trio slots, MVP tagging, locked/read-only mode
 │   │   │   │   │   └── SubmissionControl.tsx # Validation status + Lock Trio action
 │   │   │   │   └── page.tsx          # Trio draft arena — two-team browsing, sticky bottom sheet on
-│   │   │   │                         # mobile, persistent sidebar on desktop; open/locked/completed states
+│   │   │   │                         # mobile, persistent sidebar on desktop; open/locked/completed states;
+│   │   │   │                         # "Squad Room" (other users' trios) + admin "Finalize Match" scoring
 │   │   │   └── page.tsx              # Fixture list, per-card status badges
 │   │   │
 │   │   ├── rules/
@@ -97,6 +99,9 @@ ipl-fantasy-arena/
 │   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
 │   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
 │   │   ├── draftRules.ts             # Pure, unit-tested squad validation (dual-franchise, MVP, etc.)
+│   │   ├── scoringRules.ts           # Single source of truth for point values (used by /rules AND scoring.ts)
+│   │   ├── scoring.ts                # Scorecard parsing + point calculation (pure, unit-tested)
+│   │   ├── leaderboard.ts            # Mon-Sun week math + standings aggregation (pure, unit-tested)
 │   │   └── utils.ts                  # cn(), getTeamLogo(), getMatchTimeStatus() (open/locked/completed)
 │   │
 │   ├── services/
@@ -164,6 +169,25 @@ Prevents users from seeing (and copying) each other's trio picks before toss on 
 * Surfaced on the draft page (`/matches/[id]`) as a "Squad Room" section showing every other user's submitted trio for that match (or an explanatory hidden-until-toss message) once visible.
 * Caveat: the Dev Control Center's date override is a client-only simulation — it does **not** change what time Firestore rules see (`request.time` is always the real server clock). Testing visibility transitions with the date override can therefore look inconsistent between the UI's "locked/completed" state and what the rules actually reveal; this is expected, not a bug.
 
+## Scoring Engine
+
+Once a match is actually complete (per Cricbuzz, not just past its assumed duration), an admin finalizes it from a "Finalize Match Scoring" card on that match's draft page (`isAdmin && isCompleted` only):
+
+* `POST /api/finalize-match` (admin-gated, same pattern as `/api/sync`) fetches the real scorecard from `mcenter/v1/{matchId}/scard`, parses it (`src/lib/scoring.ts`), computes every submitted squad's points, and writes `totalPoints` back onto each `userSquads` doc plus a `scoring` summary onto the match doc.
+* Point values live in `src/lib/scoringRules.ts` — the single source of truth shared by the `/rules` display page and the actual calculation, so they can't drift apart.
+* Man of the Match is entered manually by the admin in a dropdown when finalizing (not exposed by any Cricbuzz endpoint found so far) and awards its bonus on top of whatever else that player earned.
+* **"Direct Hit" is folded into the regular Runout score** — Cricbuzz's data has no field distinguishing a direct-hit run-out from an assisted one, so they're scored identically.
+* Fielding credit (catches/run-outs/stumpings) comes from regex-parsing the batsman's free-text dismissal string (e.g. `"c Phil Salt b Jacob Duffy"`), matched against the two playing squads' names. **This is best-effort, not guaranteed-correct**: a real captured example showed Cricbuzz's own data being internally inconsistent — a player's own batting row said "Philip Salt" while the same match's dismissal text called him "Phil Salt". A same-surname fallback (only used when unambiguous within the two squads) recovers this specific case; see `src/lib/scoring.test.ts` for the exact real-world example.
+* **The "Dot Ball" scoring rule may never actually fire** — every bowler in a real completed match checked during development returned `dots: 0`, suggesting this field either isn't populated by this API tier or isn't reliable. The code still handles it correctly if the API ever does return real values.
+* Re-running "Finalize" for an already-scored match is allowed (idempotent overwrite) — useful if Cricbuzz's data was corrected after the fact.
+
+## Weekly Leaderboard (`/leaderboard`)
+
+* Weeks run **Monday–Sunday** (`src/lib/leaderboard.ts`). Standings are **computed live** on every page load by querying all scored squads (`totalPoints` set) whose `matchDay` falls in the selected week and summing per user — there's no separate "leaderboard" collection or scheduled rollup job to keep in sync.
+* Week navigation (prev/next) lets you browse any past week's final standings; "next week" is disabled once you're viewing the current week.
+* Once a week has fully ended, rank #1 is labeled "Winner" and #2/#3 "Runner-up"; for the current, still-in-progress week it's shown as live standings (`#1`, `#2`, ...) instead, since the week isn't decided yet.
+* History is implicit and free: since standings are computed from raw scored-squad data rather than a written summary, every past week remains browsable indefinitely with no extra storage.
+
 ## PWA
 
 * Installable (manifest + icons for 192/512/maskable/apple-touch). No service worker — offline support explicitly out of scope for now.
@@ -191,9 +215,16 @@ Synced by `/api/sync` (Admin SDK only — Firestore rules deny client writes).
   "status": "COMPLETE",
   "matchDesc": "67th Match",
   "seriesName": "Indian Premier League 2026",
-  "updatedAt": "2026-03-01T00:00:00.000Z"
+  "updatedAt": "2026-03-01T00:00:00.000Z",
+  "scoring": {
+    "finalizedAt": "2026-05-22T20:15:00.000Z",
+    "motmPlayerId": "8497",
+    "playerPoints": { "8497": 62, "10276": 145 }
+  }
 }
 ```
+
+`scoring` is only present once an admin has finalized the match (see Scoring Engine above); `playerPoints` covers every player who had any tracked stat, not just the ones drafted.
 
 Note: `status` here is whatever Cricbuzz reported *at sync time* — it does not update live. The app's own `open`/`locked`/`completed` UI state (`getMatchTimeStatus()` in `src/lib/utils.ts`) is computed client-side from `date` vs. the current time instead, since there's no live re-sync.
 
@@ -213,13 +244,16 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
   "mvpId": "123",
   "createdAt": 1772400000000,
   "matchTimestamp": "2026-05-22T14:00:00.000Z",
-  "matchDay": "2026-05-22"
+  "matchDay": "2026-05-22",
+  "userDisplayName": "Pavan",
+  "userPhotoURL": "https://lh3.googleusercontent.com/...",
+  "totalPoints": 187
 }
 ```
 
-`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad.
+`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `totalPoints` is absent until an admin finalizes that match's scoring.
 
-**Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day.
+**Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day. In practice this means every *scored* squad (finalization only ever happens post-completion, always past toss) is visible to everyone — which is exactly what the leaderboard needs.
 
 ## `settings/visibility`
 
@@ -278,7 +312,7 @@ npm run test          # run once
 npm run test:watch    # watch mode
 ```
 
-Covers `getMatchTimeStatus()` (open/locked/completed logic), the draft validation rules (`src/lib/draftRules.ts` — dual-franchise check, squad completeness), and `PlayerCard`'s selected/disabled states. Add new test files as `*.test.ts(x)` next to the code they cover.
+Covers `getMatchTimeStatus()` (open/locked/completed logic), the draft validation rules (`src/lib/draftRules.ts`), `PlayerCard`'s selected/disabled states, the scoring engine (`src/lib/scoring.ts` — dismissal parsing, bonus thresholds, the real-world name-mismatch fallback), and the leaderboard's Monday–Sunday week-boundary math (`src/lib/leaderboard.ts`). Add new test files as `*.test.ts(x)` next to the code they cover.
 
 **End-to-end tests (Playwright + Firebase Emulator Suite)** — drives a real browser through actual signed-in flows (draft → lock → submit, the submission-visibility toggle across two separate simulated users). Runs against the emulator, never real Firestore data:
 
@@ -287,7 +321,7 @@ npm run emulators   # start Auth + Firestore emulators (needs Java 21+; keep run
 npm run test:e2e    # in another terminal — seeds the emulator, then runs the suite
 ```
 
-How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment.
+How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment. The seed also pre-writes a couple of already-scored squads (bypassing the real finalize-match API, which calls the real RapidAPI) so `leaderboard.spec.ts` can exercise the real Firestore query + rules + rendering pipeline without a live scorecard fetch.
 
 `playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races.
 
@@ -305,13 +339,10 @@ Both require being logged in (`vercel login`, `firebase login`) — see each CLI
 # Known Limitations / Not Yet Built
 
 * **30-minute pre-toss lock is UI-only** — not enforced by Firestore rules or a server check. A determined client could bypass it. Low risk for a private friend-group app, but worth knowing.
-* **Real match scoring is not implemented.** Investigated feasibility (2026-07-11): Cricbuzz's `mcenter/v1/{matchId}/scard` endpoint *does* return real structured per-player batting (runs/balls/fours/sixes/strike rate) and bowling (overs/wickets/economy/dot balls) stats for completed matches — so most of the `/rules` scoring table is buildable. Gaps found:
-  * Catches/run-outs/stumpings aren't separate structured fields — they're embedded in a free-text dismissal string (`outdec`, e.g. `"c Phil Salt b Jacob Duffy"`) and need parsing.
-  * "Direct Hit" (distinct from a regular run-out in the scoring rules) has no structured signal in the API — can't be reliably distinguished.
-  * Man of the Match wasn't found in any endpoint checked so far.
-* **Weekly leaderboard is not implemented.** `/leaderboard` is still hardcoded mock data. Planned design (see `PROGRESS.md`/Notion requirements doc): Monday–Sunday weeks, top scorer wins, next two are runners-up, history retained across weeks. Blocked on the scoring engine above.
-* **Scoring trigger is planned to be admin-initiated** (e.g. a "Finalize Match" button), not automatic — this app has no cron/background job infrastructure by design, and reliably auto-detecting "truly finished, not just rain-delayed" was judged not worth the complexity versus an admin just clicking a button.
+* **Scoring accuracy depends on Cricbuzz's own data quality**, not just this codebase — see the fielding-name-mismatch and dot-ball caveats under Scoring Engine above. Treat computed scores as "very likely correct, not cryptographically guaranteed."
+* **No automatic trigger for scoring** — an admin has to click "Finalize Match" once Cricbuzz reports a match complete. Deliberate: this app has no cron/background job infrastructure by design, and reliably auto-detecting "truly finished, not just rain-delayed" was judged not worth the complexity versus a manual click.
 * Player `price` has no real pricing model (randomized at sync time).
+* `finalize-match` isn't covered by an E2E test (it calls the real RapidAPI, which automated tests shouldn't hit) — it's covered by unit tests on the underlying parsing/calculation logic (`src/lib/scoring.test.ts`) plus a real captured API response used as a test fixture, but the route handler itself is only manually verified.
 
 ---
 

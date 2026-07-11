@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap } from 'lucide-react';
+import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { auth } from '@/lib/firebase';
 import {
   getMatchById,
   getPlayersByTeams,
@@ -20,6 +21,7 @@ import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
 import { Sheet } from '@/components/ui/Sheet';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 import PlayerCard from './_components/PlayerCard';
 import SelectedSlots from './_components/SelectedSlots';
@@ -51,7 +53,7 @@ function getTeamBrand(teamShortName: string) {
 export default function SquadDraftPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string | null>(null);
   const { getEffectiveNow } = useDev();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [team1Players, setTeam1Players] = useState<Player[]>([]);
   const [team2Players, setTeam2Players] = useState<Player[]>([]);
@@ -63,6 +65,8 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [otherSquads, setOtherSquads] = useState<UserSquad[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [visibilityHiddenToday, setVisibilityHiddenToday] = useState(false);
+  const [motmSelection, setMotmSelection] = useState('');
+  const [finalizing, setFinalizing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -76,6 +80,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
 
       if (matchData) {
         setMatch(matchData);
+        setMotmSelection(matchData.scoring?.motmPlayerId ?? '');
         const playersByTeams = await getPlayersByTeams(matchData.team1, matchData.team2);
         const t1 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team1.toUpperCase());
         const t2 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team2.toUpperCase());
@@ -159,6 +164,37 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       toast.error('Failed to save your squad. Try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleFinalizeMatch = async () => {
+    if (!id) return;
+    setFinalizing(true);
+    const toastId = toast.loading('Finalizing scores...');
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/finalize-match', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ matchId: id, motmPlayerId: motmSelection || null }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(`Scored ${data.squadsUpdated} trio(s) for this match.`, { id: toastId });
+        const [refreshedMatch, refreshedSquads] = await Promise.all([getMatchById(id), getSquadsForMatch(id)]);
+        if (refreshedMatch) setMatch(refreshedMatch);
+        setOtherSquads(refreshedSquads.filter((s) => s.userId !== user?.uid));
+      } else {
+        toast.error(data.error || 'Failed to finalize scoring.', { id: toastId });
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Network error while finalizing scoring.', { id: toastId });
+    } finally {
+      setFinalizing(false);
     }
   };
 
@@ -322,6 +358,49 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           </aside>
         </div>
 
+        {isAdmin && isCompleted && (
+          <section className="mt-6">
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Award size={14} className="text-accent" />
+                <h3 className="font-display font-black text-sm uppercase italic tracking-tight">
+                  {match.scoring ? 'Re-finalize Scoring' : 'Finalize Match Scoring'}
+                </h3>
+              </div>
+              {match.scoring && (
+                <p className="text-[10px] text-muted mb-3">
+                  Last finalized {new Date(match.scoring.finalizedAt).toLocaleString()}.
+                </p>
+              )}
+              <label htmlFor="motm-select" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
+                Man of the Match (optional)
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id="motm-select"
+                  value={motmSelection}
+                  onChange={(e) => setMotmSelection(e.target.value)}
+                  className="flex-1 min-w-0 bg-surface-hover border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                >
+                  <option value="">No MOTM</option>
+                  {allPlayers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.team})
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={handleFinalizeMatch} size="md" disabled={finalizing}>
+                  {finalizing ? 'Scoring...' : match.scoring ? 'Re-finalize' : 'Finalize'}
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted leading-relaxed mt-3">
+                Fetches the real scorecard from Cricbuzz and scores every submitted trio for this match. Only
+                works once Cricbuzz itself reports the match as complete.
+              </p>
+            </Card>
+          </section>
+        )}
+
         <section className="mt-6">
           <div className="flex items-center gap-2 mb-3">
             <Users size={14} className="text-muted" />
@@ -351,9 +430,14 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                         <span className="text-[9px] font-black text-primary">{(squad.userDisplayName || '?').charAt(0)}</span>
                       )}
                     </div>
-                    <span className="text-xs font-display font-black uppercase truncate">
+                    <span className="text-xs font-display font-black uppercase truncate flex-1">
                       {squad.userDisplayName || 'Strategist'}
                     </span>
+                    {squad.totalPoints !== undefined && (
+                      <span className="text-[10px] font-display font-black text-primary shrink-0">
+                        {squad.totalPoints} pts
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {squad.players.map((pid) => {

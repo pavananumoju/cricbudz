@@ -19,6 +19,9 @@ import {
   TEST_MATCH_ID,
   TEST_MATCH_LOCKED_ID,
   TEST_MATCH_VISIBILITY_ID,
+  TEST_MATCH_SCORED_ID,
+  TEST_USER_SCORE,
+  TEST_USER_2_SCORE,
   TEST_PLAYERS,
   TOKENS_FILE,
 } from './testData';
@@ -68,6 +71,21 @@ export async function runSeed() {
     status: 'UPCOMING',
     matchDesc: 'E2E Visibility Test Match',
   });
+  const scoredMatchDate = new Date(now - 5 * 60 * 60 * 1000).toISOString(); // 5h ago — completed
+  await db.collection('matches').doc(TEST_MATCH_SCORED_ID).set({
+    id: TEST_MATCH_SCORED_ID,
+    team1: 'SRH',
+    team2: 'RCB',
+    date: scoredMatchDate,
+    venue: 'Test Ground',
+    status: 'COMPLETE',
+    matchDesc: 'E2E Scored Match',
+    scoring: {
+      finalizedAt: new Date().toISOString(),
+      motmPlayerId: null,
+      playerPoints: {},
+    },
+  });
 
   const batch = db.batch();
   TEST_PLAYERS.forEach((p) => batch.set(db.collection('players').doc(p.id), p));
@@ -84,6 +102,38 @@ export async function runSeed() {
   await auth.createUser({ uid: TEST_UID_2, email: 'e2e-user-2@example.com', displayName: 'E2E User Two' });
   await auth.createUser({ uid: TEST_ADMIN_UID, email: 'e2e-admin@example.com', displayName: 'E2E Admin' });
   await auth.setCustomUserClaims(TEST_ADMIN_UID, { admin: true });
+
+  const scoredMatchDay = scoredMatchDate.slice(0, 10);
+  await db
+    .collection('userSquads')
+    .doc(`${TEST_UID}_${TEST_MATCH_SCORED_ID}`)
+    .set({
+      userId: TEST_UID,
+      matchId: TEST_MATCH_SCORED_ID,
+      players: TEST_PLAYERS.slice(0, 3).map((p) => p.id),
+      mvpId: TEST_PLAYERS[0].id,
+      createdAt: Date.now(),
+      matchTimestamp: scoredMatchDate,
+      matchDay: scoredMatchDay,
+      userDisplayName: 'E2E User',
+      userPhotoURL: null,
+      totalPoints: TEST_USER_SCORE,
+    });
+  await db
+    .collection('userSquads')
+    .doc(`${TEST_UID_2}_${TEST_MATCH_SCORED_ID}`)
+    .set({
+      userId: TEST_UID_2,
+      matchId: TEST_MATCH_SCORED_ID,
+      players: TEST_PLAYERS.slice(0, 3).map((p) => p.id),
+      mvpId: TEST_PLAYERS[1].id,
+      createdAt: Date.now(),
+      matchTimestamp: scoredMatchDate,
+      matchDay: scoredMatchDay,
+      userDisplayName: 'E2E User Two',
+      userPhotoURL: null,
+      totalPoints: TEST_USER_2_SCORE,
+    });
 
   const userToken = await auth.createCustomToken(TEST_UID);
   const userToken2 = await auth.createCustomToken(TEST_UID_2);

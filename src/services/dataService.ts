@@ -202,6 +202,27 @@ export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
   }
 }
 
+// Every scored squad whose matchDay falls within [startDay, endDay]
+// (inclusive, both YYYY-MM-DD) — used to compute a week's leaderboard.
+// Firestore rules apply the same per-document visibility as any other
+// userSquads read, but a *scored* squad only exists once its match is
+// completed, which is always past toss — so these are visible to everyone
+// regardless of the submission-visibility toggle.
+export async function getSquadsInDateRange(startDay: string, endDay: string): Promise<UserSquad[]> {
+  try {
+    const q = query(
+      collection(db, 'userSquads'),
+      where('matchDay', '>=', startDay),
+      where('matchDay', '<=', endDay)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as UserSquad);
+  } catch (err) {
+    console.error('getSquadsInDateRange error:', err);
+    return [];
+  }
+}
+
 export async function getVisibilitySettings(): Promise<VisibilitySettings | null> {
   try {
     const snap = await getDoc(doc(db, 'settings', 'visibility'));
