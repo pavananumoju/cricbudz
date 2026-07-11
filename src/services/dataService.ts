@@ -1,13 +1,14 @@
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  query, 
-  where, 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  query,
+  where,
   orderBy,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Player, Match, UserSquad } from '@/types';
@@ -159,6 +160,14 @@ export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt
     userId,
     createdAt: Date.now()
   });
+}
+
+export async function deleteUserSquad(matchId: string) {
+  const userId = auth.currentUser?.uid;
+  if (!userId) throw new Error('User not authenticated');
+
+  const squadId = `${userId}_${matchId}`;
+  await deleteDoc(doc(db, 'userSquads', squadId));
 }
 
 export async function getUserSquads(): Promise<UserSquad[]> {

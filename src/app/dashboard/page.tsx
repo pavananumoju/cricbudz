@@ -13,9 +13,10 @@ import {
   ChevronRight,
   PlusCircle,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
-import { getUserSquads, getMatches, getPlayers } from '@/services/dataService';
+import { getUserSquads, getMatches, getPlayers, deleteUserSquad } from '@/services/dataService';
 import { UserSquad, Match, Player } from '@/types';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
@@ -32,7 +33,28 @@ export default function Dashboard() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
+
+  const handleDeleteDraft = async (matchId: string) => {
+    if (confirmDeleteId !== matchId) {
+      setConfirmDeleteId(matchId);
+      return;
+    }
+    setDeletingId(matchId);
+    try {
+      await deleteUserSquad(matchId);
+      setSquads((prev) => prev.filter((s) => s.matchId !== matchId));
+      toast.success('Draft removed.');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to remove draft. Try again.');
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -370,6 +392,8 @@ export default function Dashboard() {
           <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
             {remainingSquads.map((s, i) => {
               const label = s.match ? getMatchLabel(s.match) : null;
+              const canDelete = !s.match || getMatchTimeStatus(s.match.date, effectiveNow) === 'open';
+              const isConfirming = confirmDeleteId === s.matchId;
               return (
                 <Card key={i} className="flex items-center justify-between p-3.5">
                   <div className="flex items-center gap-3 min-w-0">
@@ -388,12 +412,30 @@ export default function Dashboard() {
                       </p>
                     </div>
                   </div>
-                  <Link
-                    href={`/matches/${s.matchId}`}
-                    className="text-[9px] font-black text-primary uppercase tracking-widest px-3 py-1.5 rounded-lg border border-primary/20 shrink-0"
-                  >
-                    View
-                  </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDeleteDraft(s.matchId)}
+                        onBlur={() => setConfirmDeleteId((id) => (id === s.matchId ? null : id))}
+                        disabled={deletingId === s.matchId}
+                        className={cn(
+                          'flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50',
+                          isConfirming
+                            ? 'text-danger border-danger/40 bg-danger-tint'
+                            : 'text-muted border-border hover:text-danger hover:border-danger/30'
+                        )}
+                      >
+                        <Trash2 size={11} />
+                        {isConfirming ? 'Confirm?' : ''}
+                      </button>
+                    )}
+                    <Link
+                      href={`/matches/${s.matchId}`}
+                      className="text-[9px] font-black text-primary uppercase tracking-widest px-3 py-1.5 rounded-lg border border-primary/20 shrink-0"
+                    >
+                      View
+                    </Link>
+                  </div>
                 </Card>
               );
             })}
