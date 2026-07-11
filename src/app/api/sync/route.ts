@@ -3,23 +3,13 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 import { getIPLSeries, getTeamPlayers } from '@/lib/rapidapi';
-import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/adminAuth';
 import { CRICKET_CONFIG } from '@/config/cricket';
 
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) {
-    return NextResponse.json({ error: 'Missing Authorization header' }, { status: 401 });
-  }
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(token);
-    if (decoded.admin !== true) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-  }
+  const authResult = await requireAdmin(req);
+  if ('error' in authResult) return authResult.error;
 
   const adminDb = getAdminDb();
   const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
@@ -130,6 +120,10 @@ export async function GET(req: Request) {
     const matchesToSync = matches;
     const syncedMatchShortNames: string[] = [];
     const syncedTeams = new Set<number>();
+    // Surfaced in the response so a Cricbuzz shape change (e.g. `player` key
+    // renamed) shows up as a visible warning instead of silently syncing a
+    // team with zero players.
+    const teamsWithNoPlayers: string[] = [];
 
     console.log(`Starting sync for all ${matchesToSync.length} matches in series...`);
 
@@ -210,6 +204,8 @@ export async function GET(req: Request) {
             await playerBatch.commit();
             syncedTeams.add(match.team1Id);
             console.log(`Synced players for ${match.team1}`);
+          } else {
+            teamsWithNoPlayers.push(t1Ident);
           }
         }
 
@@ -252,6 +248,8 @@ export async function GET(req: Request) {
             await playerBatch.commit();
             syncedTeams.add(match.team2Id);
             console.log(`Synced players for ${match.team2}`);
+          } else {
+            teamsWithNoPlayers.push(t2Ident);
           }
         }
       } catch (err) {
@@ -259,11 +257,18 @@ export async function GET(req: Request) {
       }
     }
 
+    const warning = teamsWithNoPlayers.length > 0
+      ? `Cricbuzz returned no players for: ${[...new Set(teamsWithNoPlayers)].join(', ')}. ` +
+        `Their player-list response shape may have changed — check before relying on synced squads for these teams.`
+      : undefined;
+    if (warning) console.warn(warning);
+
     return NextResponse.json({
       success: true,
       message: `Successfully synced ${syncedMatchShortNames.length} IPL ${CRICKET_CONFIG.IPL_SEASON} fixtures.`,
       matchesSynced: syncedMatchShortNames,
       totalFound: matches.length,
+      warning,
       debug: {
         matchesFound: matches.map(m => m.matchDesc),
         hasMatchDetails: !!data.matchDetails,

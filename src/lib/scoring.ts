@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { SCORING_RULES, MVP_MULTIPLIER } from './scoringRules';
 
 export interface RawPlayerStats {
@@ -13,23 +14,49 @@ export function emptyStats(): RawPlayerStats {
   return { runs: 0, wickets: 0, catches: 0, runouts: 0, stumpings: 0, dotBalls: 0 };
 }
 
-interface ScorecardBatsman {
-  name: string;
-  runs?: number;
-  outdec?: string;
-}
-interface ScorecardBowler {
-  name: string;
-  wickets?: number;
-  dots?: number;
-}
-interface ScorecardInnings {
-  batsman?: ScorecardBatsman[];
-  bowler?: ScorecardBowler[];
-}
-export interface ScorecardResponse {
-  scorecard?: ScorecardInnings[];
-  ismatchcomplete?: boolean;
+// Only the fields the scoring engine actually reads. `.passthrough()` lets
+// Cricbuzz add new fields freely without breaking us — we only care if a
+// field we *depend on* goes missing or changes type, which is exactly what
+// this schema catches with a clear error instead of a silent wrong score.
+const ScorecardBatsmanSchema = z.object({
+  name: z.string(),
+  runs: z.number().optional(),
+  outdec: z.string().optional(),
+}).passthrough();
+
+const ScorecardBowlerSchema = z.object({
+  name: z.string(),
+  wickets: z.number().optional(),
+  dots: z.number().optional(),
+}).passthrough();
+
+const ScorecardInningsSchema = z.object({
+  batsman: z.array(ScorecardBatsmanSchema).optional(),
+  bowler: z.array(ScorecardBowlerSchema).optional(),
+}).passthrough();
+
+export const ScorecardResponseSchema = z.object({
+  scorecard: z.array(ScorecardInningsSchema).optional(),
+  ismatchcomplete: z.boolean().optional(),
+}).passthrough();
+
+export type ScorecardResponse = z.infer<typeof ScorecardResponseSchema>;
+
+// Throws a clear, specific error (which collection/field, and why) instead
+// of letting a shape mismatch flow silently into wrong point calculations.
+// Call this on every scorecard fetched from RapidAPI before parsing it.
+export function validateScorecardResponse(raw: unknown): ScorecardResponse {
+  const result = ScorecardResponseSchema.safeParse(raw);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('; ');
+    throw new Error(
+      `Cricbuzz's scorecard response no longer matches the shape this app expects — their API may have ` +
+      `changed. Scoring was NOT calculated to avoid silently producing wrong points. Details: ${issues}`
+    );
+  }
+  return result.data;
 }
 
 // Maps a normalized player name (as it appears for the two playing squads)

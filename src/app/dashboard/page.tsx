@@ -67,6 +67,7 @@ export default function Dashboard() {
       const data = await res.json();
       if (res.ok && data.success) {
         toast.success(`Synced ${data.totalFound || 0} matches`, { id: toastId });
+        if (data.warning) toast.warning(data.warning, { duration: 10000 });
         setTimeout(() => window.location.reload(), 1200);
       } else {
         toast.error('Sync error: ' + (data.message || data.error || 'Server error'), { id: toastId });

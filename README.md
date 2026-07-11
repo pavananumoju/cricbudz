@@ -6,6 +6,8 @@ Each match, every user drafts a 3-player "trio" (from both playing teams), tags 
 
 **Production:** https://ipl-fantasy-arena.vercel.app
 
+**Coming back after a break?** See [`RUNBOOK.md`](./RUNBOOK.md) — a plain-English, step-by-step maintenance checklist (health checks, season rollover, backups, dependency upgrades) written so it can be followed personally or handed wholesale to an AI coding assistant.
+
 ---
 
 # Tech Stack
@@ -49,10 +51,14 @@ ipl-fantasy-arena/
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── sync/                 # Admin-only ETL: Cricbuzz -> Firestore (matches + players)
-│   │   │   └── finalize-match/       # Admin-only: fetch scorecard, score every squad for a match
+│   │   │   ├── finalize-match/       # Admin-only: fetch scorecard, score every squad for a match
+│   │   │   └── admin/
+│   │   │       ├── users/            # Admin-only: list users, grant/revoke the `admin` custom claim
+│   │   │       └── backup/           # Admin-only: read-only full Firestore export as downloadable JSON
 │   │   │
 │   │   ├── admin/
-│   │   │   └── page.tsx              # Dev Control Center: date override, submission visibility toggle
+│   │   │   └── page.tsx              # Dev Control Center: date override, submission visibility toggle,
+│   │   │                             # Registered Users (grant/revoke admin), Data Backup
 │   │   │
 │   │   ├── dashboard/
 │   │   │   └── page.tsx              # Today's Arena, quick links, other drafts (with delete)
@@ -97,6 +103,7 @@ ipl-fantasy-arena/
 │   ├── lib/
 │   │   ├── firebase.ts               # Client SDK (reads, user-squad writes); connects to emulators in E2E
 │   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
+│   │   ├── adminAuth.ts              # requireAdmin(req): shared Bearer-token + admin-claim check for API routes
 │   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
 │   │   ├── draftRules.ts             # Pure, unit-tested squad validation (dual-franchise, MVP, etc.)
 │   │   ├── scoringRules.ts           # Single source of truth for point values (used by /rules AND scoring.ts)
@@ -113,7 +120,9 @@ ipl-fantasy-arena/
 │   └── firebase-applet-config.json   # Client-side Firebase config (not env vars — see src/lib/firebase.ts)
 │
 ├── scripts/
-│   └── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
+│   ├── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
+│   └── restore-firestore.mjs         # CLI-only Firestore restore from a backup JSON (dry-run by default,
+│                                      # requires --confirm to write) — deliberately not a UI button
 │
 ├── e2e/                               # Playwright specs, run against the Firebase Emulator Suite
 │   ├── seed.ts / testData.ts         # Fixed test users/matches/players seeded before each run
@@ -128,6 +137,7 @@ ipl-fantasy-arena/
 │   └── icon-*.png                    # PWA icons (placeholder artwork)
 ├── CLAUDE.md                         # Instructions/architecture notes for AI coding agents
 ├── PROGRESS.md                       # Standing architecture decisions (scope, DB choice, etc.)
+├── RUNBOOK.md                        # Plain-English step-by-step maintenance checklist
 └── README.md                         # This file
 ```
 
@@ -154,9 +164,11 @@ ipl-fantasy-arena/
 
 ## Admin / Dev Control Center (`/admin`)
 
-* Gated by `isAdmin` (redirects non-admins), with real server-side enforcement on the one privileged action (`/api/sync` requires a valid ID token with the `admin` claim).
+* Gated by `isAdmin` (redirects non-admins), with real server-side enforcement on every privileged action — `/api/sync`, `/api/finalize-match`, and `/api/admin/*` all require a valid ID token with the `admin` claim, checked via the shared `requireAdmin()` helper (`src/lib/adminAuth.ts`).
 * **System date override** — simulates "today" app-wide (real clock still ticks within that simulated day) for testing lock/completion logic without waiting for real IPL dates.
 * **Submission visibility toggle** — see below.
+* **Registered Users** — lists every Firebase Auth user (name, email, current admin status) with a Grant/Revoke Admin button per row. Backed by `GET/POST /api/admin/users`. An admin can't revoke their own access from this screen (prevents accidental lockout).
+* **Data Backup** — one-click "Download Backup" button (`GET /api/admin/backup`) exports every Firestore collection as a downloadable JSON file. Read-only and safe to click anytime. Restoring is intentionally **not** a UI button — see Reliability & Long-Term Maintenance below.
 
 ## Submission Visibility Toggle
 
@@ -194,6 +206,60 @@ Once a match is actually complete (per Cricbuzz, not just past its assumed durat
 
 * Installable (manifest + icons for 192/512/maskable/apple-touch). No service worker — offline support explicitly out of scope for now.
 * Mobile-first design: bottom tab bar on mobile, top nav links + no bottom bar on desktop, auto (system) + manual dark/light theme.
+
+---
+
+# Reliability & Long-Term Maintenance
+
+This app is expected to sit untouched for months between IPL seasons, so a
+few things were deliberately built to fail loudly and stay recoverable
+rather than silently drift or lose data. See [`RUNBOOK.md`](./RUNBOOK.md)
+for the step-by-step checklist; this section covers the *why*.
+
+## RapidAPI response validation (fail loudly, not silently wrong)
+
+Cricbuzz (the actual data source behind RapidAPI) can change its response
+shape without warning, since it's a third party we don't control. Two
+different failure modes are handled differently on purpose:
+
+* **Scorecard fetch (`/api/finalize-match`)** — the shape Cricbuzz returns
+  is validated at runtime with a Zod schema (`ScorecardResponseSchema` in
+  `src/lib/scoring.ts`, via `validateScorecardResponse()`) before any
+  points are calculated. The schema uses `.passthrough()` so *new* fields
+  Cricbuzz adds don't break anything — only a *missing or retyped* field
+  the scoring engine actually depends on does. If that happens, the route
+  throws a specific error (naming the exact field path) and returns
+  HTTP 502 **instead of silently computing wrong fantasy points** — wrong
+  scores are worse than a visible failure here.
+* **Fixture/roster sync (`/api/sync`)** — already defensively parses
+  several known Cricbuzz response shapes and reports `debug` info when
+  zero matches are found. Additionally, if a team's player-list response
+  is missing/reshaped, the sync no longer just silently skips that team:
+  it collects `teamsWithNoPlayers` and returns a `warning` string, which
+  the dashboard surfaces as an orange toast so it's visible immediately
+  after clicking "Sync Fixtures" rather than only in server logs.
+
+## Firestore backup & restore
+
+* **Backup:** `/admin`'s "Download Backup" button (`GET /api/admin/backup`,
+  admin-gated) reads every collection in `BACKED_UP_COLLECTIONS` (`matches`,
+  `players`, `userSquads`, `settings`) and returns it as one downloadable
+  JSON file. Read-only, safe to click anytime, no write path involved.
+* **Restore:** deliberately a script, not a button —
+  `node --env-file=.env.local scripts/restore-firestore.mjs <backup.json>`.
+  Defaults to a dry run (prints what it *would* restore, writes nothing);
+  add `--confirm` to actually overwrite. Restoring can clobber live data
+  with stale data, so it should always require someone deliberately
+  running a command, never a misclick.
+
+## Admin auth: one shared helper
+
+All admin-only API routes (`/api/sync`, `/api/finalize-match`,
+`/api/admin/users`, `/api/admin/backup`) verify the caller through the same
+`requireAdmin(req)` helper (`src/lib/adminAuth.ts`) — checks the Bearer
+token, verifies it via `getAdminAuth().verifyIdToken()`, and confirms the
+`admin` custom claim. One implementation to keep correct instead of four
+copies that could quietly drift apart.
 
 ---
 

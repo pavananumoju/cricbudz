@@ -6,6 +6,7 @@ import {
   calculatePlayerPoints,
   calculateSquadScore,
   emptyStats,
+  validateScorecardResponse,
   type PlayerNameLookup,
 } from './scoring';
 import { SCORING_RULES, MVP_MULTIPLIER } from './scoringRules';
@@ -216,5 +217,44 @@ describe('calculateSquadScore', () => {
     const playerPoints = new Map([['a', 20]]);
     const score = calculateSquadScore(['a', 'unknown-player', 'also-unknown'], 'a', playerPoints);
     expect(score).toBe(20 * MVP_MULTIPLIER);
+  });
+});
+
+describe('validateScorecardResponse', () => {
+  it('accepts a well-formed Cricbuzz scorecard response', () => {
+    const raw = {
+      scorecard: [
+        {
+          batsman: [{ name: 'Travis Head', runs: 34, outdec: 'c Kohli b Bumrah' }],
+          bowler: [{ name: 'Bhuvneshwar Kumar', wickets: 2, dots: 12 }],
+        },
+      ],
+      ismatchcomplete: true,
+    };
+    expect(() => validateScorecardResponse(raw)).not.toThrow();
+    expect(validateScorecardResponse(raw)).toEqual(raw);
+  });
+
+  it('accepts extra unknown fields Cricbuzz might add later (passthrough)', () => {
+    const raw = {
+      scorecard: [{ batsman: [{ name: 'Travis Head', runs: 34, someNewField: 'xyz' }] }],
+      ismatchcomplete: true,
+      brandNewTopLevelField: 42,
+    };
+    expect(() => validateScorecardResponse(raw)).not.toThrow();
+  });
+
+  it('throws a clear error naming the field when a depended-on field changes type', () => {
+    const raw = {
+      scorecard: [{ batsman: [{ name: 'Travis Head', runs: '34 not a number' }] }],
+    };
+    expect(() => validateScorecardResponse(raw)).toThrow(/scorecard\.0\.batsman\.0\.runs/);
+  });
+
+  it('throws a clear error when the response is a totally different shape', () => {
+    expect(() => validateScorecardResponse({ someUnrelatedApiChange: true })).not.toThrow();
+    expect(() => validateScorecardResponse('not even an object')).toThrow(
+      /Cricbuzz's scorecard response no longer matches the shape this app expects/
+    );
   });
 });

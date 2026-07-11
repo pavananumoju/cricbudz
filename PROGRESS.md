@@ -69,6 +69,47 @@ Fixed:
 Client-side `isAdmin` checks remain (for UX — hiding admin UI from
 non-admins) but are cosmetic only; the real enforcement is server-side.
 
+## Long-term maintainability hardening (2026-07-11)
+
+The 2026 IPL season ended and the app will sit untouched for months until
+the next one. To make it safe to pick back up cold (by the owner, who may
+not be comfortable with the code after a long gap, or by handing the whole
+thing to an AI assistant), four things were built:
+
+1. **`RUNBOOK.md`** — a plain-English, non-code, step-by-step maintenance
+   checklist (health checks, season rollover, backups, dependency
+   upgrades) written to be followed personally or handed wholesale to an
+   AI coding assistant. Kept deliberately separate from `CLAUDE.md`
+   (technical/AI-oriented) and `README.md` (technical/detailed reference).
+2. **RapidAPI fail-loud validation** — Cricbuzz can change its response
+   shape without warning since it's a third party outside our control.
+   The scorecard fetch (`finalize-match`) is now validated at runtime via
+   a Zod schema (`src/lib/scoring.ts`); a shape mismatch throws a specific
+   error and returns HTTP 502 instead of silently computing wrong fantasy
+   points. The fixture/roster sync now also surfaces a `warning` (toast on
+   the dashboard) if a team's player list comes back empty/reshaped,
+   instead of silently syncing zero players for that team.
+3. **Admin Users page** — `/admin` now lists every registered user (name,
+   email, admin status) with Grant/Revoke Admin buttons (`/api/admin/users`).
+   Deliberately kept to just those fields per explicit ask — no photos,
+   activity stats, or other elaboration.
+4. **Firestore backup/restore** — `/admin` has a one-click, read-only
+   "Download Backup" button exporting all data as JSON. Restoring is
+   **only** a CLI script (`scripts/restore-firestore.mjs`, dry-run by
+   default, requires `--confirm`) — deliberately not a UI button, since a
+   misclick on "restore" could silently overwrite live data with stale
+   data. This asymmetry (easy backup, deliberately-frictioned restore) is
+   intentional, not an oversight.
+
+Also: the four admin API routes were retrofitted to share one
+`requireAdmin()` auth helper (`src/lib/adminAuth.ts`) instead of each
+duplicating the same Bearer-token/custom-claim check inline.
+
+**Not done in this pass:** consolidating "Sync Fixtures" (dashboard) and
+"Finalize Match" (per-match draft page) into the new admin Users page —
+the user's simplified spec for that page was just users/admin-status, so
+those actions were deliberately left where they already were.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

@@ -3,18 +3,27 @@
 import React, { useEffect, useState } from 'react';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
-import { Calendar, Save, Trash2, Settings, AlertCircle, EyeOff } from 'lucide-react';
+import { auth } from '@/lib/firebase';
+import { Calendar, Save, Trash2, Settings, AlertCircle, EyeOff, Users, ShieldCheck, DatabaseBackup } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { getVisibilitySettings, setVisibilitySettings } from '@/services/dataService';
 import { cn } from '@/lib/utils';
 
+interface AdminUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  isAdmin: boolean;
+}
+
 export default function AdminPage() {
   const router = useRouter();
-  const { isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
   const { dateOverride, setDateOverride, getEffectiveNow } = useDev();
   const [inputValue, setInputValue] = useState(dateOverride || '');
 
@@ -22,6 +31,11 @@ export default function AdminPage() {
   const [visDate, setVisDate] = useState('');
   const [visLoading, setVisLoading] = useState(true);
   const [visSaving, setVisSaving] = useState(false);
+
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [togglingUid, setTogglingUid] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAdmin) router.replace('/dashboard');
@@ -37,7 +51,93 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/users', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsers(data.users);
+      } else {
+        toast.error(data.error || 'Failed to load users.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Network error loading users.');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
   if (loading || !isAdmin) return null;
+
+  const handleToggleAdmin = async (target: AdminUser) => {
+    const nextIsAdmin = !target.isAdmin;
+    setTogglingUid(target.uid);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ uid: target.uid, isAdmin: nextIsAdmin }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsers((prev) => prev.map((u) => (u.uid === target.uid ? { ...u, isAdmin: nextIsAdmin } : u)));
+        toast.success(`${target.displayName || target.email} is ${nextIsAdmin ? 'now an admin' : 'no longer an admin'}.`);
+      } else {
+        toast.error(data.error || 'Failed to update admin status.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Network error updating admin status.');
+    } finally {
+      setTogglingUid(null);
+    }
+  };
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    const toastId = toast.loading('Exporting backup...');
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/backup', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Backup failed.', { id: toastId });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cricbudz-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded.', { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error('Network error during backup.', { id: toastId });
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   const handleSaveVisibility = async () => {
     setVisSaving(true);
@@ -185,6 +285,74 @@ export default function AdminPage() {
               </div>
             </>
           )}
+        </Card>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <Users size={17} className="text-primary" />
+            <h2 className="font-display font-black text-sm uppercase tracking-tight italic">Registered Users</h2>
+          </div>
+
+          {usersLoading ? (
+            <p className="text-xs text-muted">Loading...</p>
+          ) : users.length === 0 ? (
+            <p className="text-xs text-muted">No registered users yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {users.map((u) => {
+                const isSelf = u.uid === user?.uid;
+                return (
+                  <div
+                    key={u.uid}
+                    className="flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-surface-hover"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-display font-black text-xs uppercase tracking-tight truncate">
+                          {u.displayName || u.email || u.uid}
+                        </h4>
+                        {isSelf && <span className="text-[8px] font-black text-muted uppercase tracking-widest">(You)</span>}
+                      </div>
+                      <p className="text-[10px] text-muted truncate mt-0.5">{u.email}</p>
+                    </div>
+                    {u.isAdmin && (
+                      <Badge variant="primary" className="shrink-0">
+                        <ShieldCheck size={10} />
+                        Admin
+                      </Badge>
+                    )}
+                    <Button
+                      onClick={() => handleToggleAdmin(u)}
+                      variant={u.isAdmin ? 'destructive' : 'secondary'}
+                      size="sm"
+                      disabled={togglingUid === u.uid || (isSelf && u.isAdmin)}
+                      className="shrink-0"
+                    >
+                      {togglingUid === u.uid ? '...' : u.isAdmin ? 'Revoke' : 'Grant Admin'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <DatabaseBackup size={17} className="text-primary" />
+            <h2 className="font-display font-black text-sm uppercase tracking-tight italic">Data Backup</h2>
+          </div>
+          <p className="text-[11px] text-muted leading-relaxed font-medium mb-4">
+            Downloads every collection (matches, players, squads, settings) as one JSON file to your device.
+            Keep it somewhere safe — if Firestore data is ever lost, this file can restore it.
+          </p>
+          <Button onClick={handleBackup} size="md" disabled={backingUp} className="w-full">
+            {backingUp ? 'Exporting...' : 'Download Backup'}
+          </Button>
         </Card>
       </motion.div>
     </div>

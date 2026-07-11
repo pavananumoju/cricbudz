@@ -3,23 +3,20 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 import { getMatchScorecard } from '@/lib/rapidapi';
-import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
-import { buildPlayerNameLookup, parseScorecard, calculatePlayerPoints, calculateSquadScore } from '@/lib/scoring';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAdmin } from '@/lib/adminAuth';
+import {
+  buildPlayerNameLookup,
+  parseScorecard,
+  calculatePlayerPoints,
+  calculateSquadScore,
+  validateScorecardResponse,
+  type ScorecardResponse,
+} from '@/lib/scoring';
 
 export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) {
-    return NextResponse.json({ error: 'Missing Authorization header' }, { status: 401 });
-  }
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(token);
-    if (decoded.admin !== true) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-  }
+  const authResult = await requireAdmin(req);
+  if ('error' in authResult) return authResult.error;
 
   let body: { matchId?: string; motmPlayerId?: string | null };
   try {
@@ -41,12 +38,14 @@ export async function POST(req: Request) {
   }
   const match = matchSnap.data() as { team1: string; team2: string };
 
-  let scorecard;
+  let scorecard: ScorecardResponse;
   try {
-    scorecard = await getMatchScorecard(matchId);
+    const raw = await getMatchScorecard(matchId);
+    scorecard = validateScorecardResponse(raw);
   } catch (error) {
-    console.error('Scorecard fetch failed:', error);
-    return NextResponse.json({ error: 'Failed to fetch scorecard from RapidAPI' }, { status: 502 });
+    console.error('Scorecard fetch/validation failed:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch scorecard from RapidAPI';
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   if (scorecard?.ismatchcomplete === false) {
