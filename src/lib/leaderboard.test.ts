@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getWeekRange, shiftWeek, computeStandings } from './leaderboard';
+import { getWeekRange, shiftWeek, computeStandings, getWeekNumber } from './leaderboard';
 import { UserSquad } from '@/types';
 
 function mkSquad(overrides: Partial<UserSquad>): UserSquad {
@@ -58,6 +58,32 @@ describe('shiftWeek', () => {
     const prev = shiftWeek(current, -1);
     expect(prev.startDay).toBe('2026-04-06');
     expect(prev.endDay).toBe('2026-04-12');
+  });
+});
+
+describe('getWeekNumber', () => {
+  it('labels the season-opener week as Week 1', () => {
+    // Season opener is a Saturday; its week is Week 1 regardless of which
+    // day within that week `seasonStart` itself falls on.
+    const seasonStart = new Date('2026-03-28T14:00:00'); // Saturday
+    const week1 = getWeekRange(seasonStart);
+    expect(getWeekNumber(week1.start, seasonStart)).toBe(1);
+  });
+
+  it('increments by exactly 1 for each subsequent week', () => {
+    const seasonStart = new Date('2026-03-28T14:00:00');
+    const week2 = shiftWeek(getWeekRange(seasonStart), 1);
+    const week8 = shiftWeek(getWeekRange(seasonStart), 7);
+    expect(getWeekNumber(week2.start, seasonStart)).toBe(2);
+    expect(getWeekNumber(week8.start, seasonStart)).toBe(8);
+  });
+
+  it('matches the real May 11-17 week against the real March 28 season opener', () => {
+    // The exact scenario reported: season opener 2026-03-28, and the week
+    // of May 11-17 should read as a specific, correct week number.
+    const seasonStart = new Date('2026-03-28T14:00:00');
+    const may11Week = getWeekRange(new Date('2026-05-15T14:00:00'));
+    expect(getWeekNumber(may11Week.start, seasonStart)).toBe(8);
   });
 });
 

@@ -2,21 +2,35 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Trophy, Medal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trophy, ChevronLeft, ChevronRight, Crown } from 'lucide-react';
 import Image from 'next/image';
 import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
-import { getWeekRange, shiftWeek, formatWeekLabel, computeStandings, type StandingsEntry } from '@/lib/leaderboard';
-import { getSquadsInDateRange } from '@/services/dataService';
+import {
+  getWeekRange,
+  shiftWeek,
+  formatWeekLabel,
+  getWeekNumber,
+  computeStandings,
+  type StandingsEntry,
+} from '@/lib/leaderboard';
+import { getSquadsInDateRange, getEarliestMatchDate } from '@/services/dataService';
 import { useDev } from '@/context/DevContext';
 
-function Avatar({ entry, className }: { entry: StandingsEntry; className: string }) {
+const MEDAL_STYLES: Record<number, { badge: string; row: string }> = {
+  1: { badge: 'bg-accent text-white shadow-sm shadow-accent/30', row: 'bg-accent-tint/60 border-accent/30' },
+  2: { badge: 'bg-slate-300 text-slate-800 dark:bg-slate-400 dark:text-slate-900', row: 'border-border' },
+  3: { badge: 'bg-orange-300 text-orange-900 dark:bg-orange-400/80 dark:text-orange-950', row: 'border-border' },
+};
+
+function Avatar({ entry }: { entry: StandingsEntry }) {
   if (entry.photoURL) {
     return <Image src={entry.photoURL} alt="" fill sizes="80px" className="object-cover" unoptimized />;
   }
   return (
-    <div className={cn('w-full h-full flex items-center justify-center bg-primary-tint text-primary font-display font-black', className)}>
+    <div className="w-full h-full flex items-center justify-center bg-primary-tint text-primary font-display font-black text-sm">
       {entry.displayName.charAt(0).toUpperCase()}
     </div>
   );
@@ -26,7 +40,12 @@ export default function LeaderboardPage() {
   const { getEffectiveNow } = useDev();
   const [weekRange, setWeekRange] = useState(() => getWeekRange(getEffectiveNow()));
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
+  const [seasonStart, setSeasonStart] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getEarliestMatchDate().then((date) => setSeasonStart(date ? new Date(date) : null));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -39,10 +58,7 @@ export default function LeaderboardPage() {
   const currentWeek = getWeekRange(getEffectiveNow());
   const isCurrentWeek = weekRange.startDay === currentWeek.startDay;
   const isWeekOver = weekRange.end.getTime() < getEffectiveNow().getTime();
-
-  const [first, second, third] = [standings[0], standings[1], standings[2]];
-  const podium = [second, first, third].filter(Boolean);
-  const rest = standings.slice(3);
+  const weekNumber = seasonStart ? getWeekNumber(weekRange.start, seasonStart) : null;
 
   return (
     <div className="px-4 space-y-6 pb-4 lg:max-w-2xl lg:mx-auto">
@@ -63,28 +79,34 @@ export default function LeaderboardPage() {
         <button
           onClick={() => setWeekRange((r) => shiftWeek(r, -1))}
           aria-label="Previous week"
-          className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center active:scale-95 transition-transform"
+          className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center active:scale-95 transition-transform shrink-0"
         >
           <ChevronLeft size={16} />
         </button>
-        <div className="text-center">
-          <p className="text-xs font-display font-black uppercase tracking-tight">{formatWeekLabel(weekRange)}</p>
-          {isCurrentWeek && <p className="text-[9px] text-accent font-black uppercase tracking-widest mt-0.5">This Week</p>}
+        <div className="text-center min-w-0">
+          <div className="flex items-center justify-center gap-2">
+            <p className="font-display font-black text-base uppercase italic tracking-tight truncate">
+              {weekNumber !== null ? `Week ${weekNumber}` : 'This Week'}
+            </p>
+            {isCurrentWeek && <Badge variant="success" dot>Live</Badge>}
+          </div>
+          <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-0.5">{formatWeekLabel(weekRange)}</p>
         </div>
         <button
           onClick={() => setWeekRange((r) => shiftWeek(r, 1))}
           disabled={isCurrentWeek}
           aria-label="Next week"
-          className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none"
+          className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none shrink-0"
         >
           <ChevronRight size={16} />
         </button>
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-32 w-full rounded-3xl" />
-          <Skeleton className="h-40 w-full rounded-3xl" />
+        <div className="space-y-2.5">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+          ))}
         </div>
       ) : standings.length === 0 ? (
         <Card className="text-center py-16 border-dashed">
@@ -95,75 +117,55 @@ export default function LeaderboardPage() {
           </p>
         </Card>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2.5 items-end">
-            {podium.map((entry) => {
-              const isFirst = entry.rank === 1;
-              return (
-                <motion.div
-                  key={entry.userId}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: isFirst ? 0.05 : 0.15 }}
+        <div className="space-y-2">
+          {standings.map((entry, idx) => {
+            const medal = MEDAL_STYLES[entry.rank];
+            const isFirst = entry.rank === 1;
+            return (
+              <motion.div
+                key={entry.userId}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(idx, 8) * 0.03 }}
+              >
+                <Card
+                  className={cn(
+                    'p-3.5 flex items-center gap-3',
+                    medal ? medal.row : 'border-border'
+                  )}
                 >
-                  <Card
+                  <div
                     className={cn(
-                      'text-center relative overflow-hidden',
-                      isFirst ? 'p-4 pt-6 border-accent/40 shadow-md' : 'p-3 pt-5'
+                      'w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-display font-black text-sm',
+                      medal ? medal.badge : 'bg-surface-hover text-muted'
                     )}
                   >
-                    {isFirst && <Medal size={22} className="absolute top-2.5 right-2.5 text-accent" />}
-                    <div
-                      className={cn(
-                        'mx-auto mb-2.5 rounded-2xl overflow-hidden border-2 relative',
-                        isFirst ? 'w-14 h-14 border-accent' : 'w-11 h-11 border-border'
-                      )}
-                    >
-                      <Avatar entry={entry} className="text-sm" />
-                    </div>
-                    <h3 className={cn('font-display font-black truncate', isFirst ? 'text-sm' : 'text-xs')}>{entry.displayName}</h3>
-                    <p className="text-muted text-[8px] font-bold uppercase tracking-widest mt-0.5 mb-2">
-                      {isWeekOver ? (isFirst ? 'Winner' : 'Runner-up') : `#${entry.rank}`}
-                    </p>
-                    <div
-                      className={cn(
-                        'rounded-xl font-display font-black',
-                        isFirst ? 'bg-accent text-white py-2 text-sm' : 'bg-surface-hover text-muted py-1.5 text-xs'
-                      )}
-                    >
-                      {entry.points.toLocaleString()}
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                    {isFirst ? <Crown size={15} className="fill-current" /> : entry.rank}
+                  </div>
 
-          {rest.length > 0 && (
-            <Card className="overflow-hidden">
-              <div className="divide-y divide-border">
-                {rest.map((entry, idx) => (
-                  <motion.div
-                    key={entry.userId}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 + idx * 0.03 }}
-                    className="flex items-center gap-3 p-3.5"
-                  >
-                    <span className="w-6 text-center font-display font-black text-sm text-muted/50 shrink-0">{entry.rank}</span>
-                    <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shrink-0 relative">
-                      <Avatar entry={entry} className="text-xs" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-display font-black text-xs uppercase truncate">{entry.displayName}</h4>
-                    </div>
-                    <span className="font-display font-black text-sm shrink-0 w-14 text-right">{entry.points.toLocaleString()}</span>
-                  </motion.div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </>
+                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-border shrink-0 relative">
+                    <Avatar entry={entry} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-display font-black text-sm uppercase italic tracking-tight truncate">{entry.displayName}</h4>
+                    <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-0.5">
+                      {isWeekOver && isFirst
+                        ? 'Winner'
+                        : isWeekOver && entry.rank <= 3
+                        ? 'Runner-up'
+                        : `${entry.matchesScored} match${entry.matchesScored === 1 ? '' : 'es'} scored`}
+                    </p>
+                  </div>
+
+                  <span className={cn('font-display font-black text-lg shrink-0', isFirst ? 'text-accent' : 'text-foreground')}>
+                    {entry.points.toLocaleString()}
+                  </span>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

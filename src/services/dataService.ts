@@ -8,10 +8,26 @@ import {
   query,
   where,
   orderBy,
+  limit,
   Timestamp
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
+
+// The season's first synced match's date — used to number leaderboard
+// weeks ("Week 1", "Week 2", ...) relative to when the season actually
+// started, rather than an arbitrary ISO calendar week number.
+export async function getEarliestMatchDate(): Promise<string | null> {
+  try {
+    const q = query(collection(db, 'matches'), orderBy('date', 'asc'), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return (snap.docs[0].data() as Match).date;
+  } catch (err) {
+    console.error('getEarliestMatchDate error:', err);
+    return null;
+  }
+}
 
 export async function getMatches(): Promise<Match[]> {
   try {

@@ -41,6 +41,17 @@ export function formatWeekLabel(range: WeekRange): string {
   return `${startLabel} – ${endLabel}`;
 }
 
+// "Week 1" = the Monday-Sunday week containing the season's first match,
+// counting forward from there — not the ISO calendar week number, which
+// wouldn't mean anything to a user ("Week 20"?). `seasonStart` is any date
+// within the season's first match week (the earliest synced match's date).
+export function getWeekNumber(weekStart: Date, seasonStart: Date): number {
+  const seasonFirstWeekStart = getWeekRange(seasonStart).start;
+  const diffMs = weekStart.getTime() - seasonFirstWeekStart.getTime();
+  const diffWeeks = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+  return diffWeeks + 1;
+}
+
 function toDayString(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');

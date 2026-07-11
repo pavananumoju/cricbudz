@@ -184,8 +184,10 @@ Once a match is actually complete (per Cricbuzz, not just past its assumed durat
 ## Weekly Leaderboard (`/leaderboard`)
 
 * Weeks run **Monday–Sunday** (`src/lib/leaderboard.ts`). Standings are **computed live** on every page load by querying all scored squads (`totalPoints` set) whose `matchDay` falls in the selected week and summing per user — there's no separate "leaderboard" collection or scheduled rollup job to keep in sync.
+* Header reads **"Week N"** (e.g. "Week 8"), numbered from the season's actual first synced match (`getEarliestMatchDate()` + `getWeekNumber()`) — not an arbitrary ISO calendar week number, which wouldn't mean anything to a user. Falls back to just showing the date range if no matches are synced yet.
+* A flat ranked list — `1. Name … points`, `2. Name … points`, etc. — not a separate podium widget. Top 3 get gold/silver/bronze rank badges (#1 gets a crown icon), everyone else gets a plain numbered badge.
 * Week navigation (prev/next) lets you browse any past week's final standings; "next week" is disabled once you're viewing the current week.
-* Once a week has fully ended, rank #1 is labeled "Winner" and #2/#3 "Runner-up"; for the current, still-in-progress week it's shown as live standings (`#1`, `#2`, ...) instead, since the week isn't decided yet.
+* Once a week has fully ended, rank #1 is labeled "Winner" and #2/#3 "Runner-up"; for the current, still-in-progress week each row instead shows how many matches that user has had scored so far, since the week isn't decided yet.
 * History is implicit and free: since standings are computed from raw scored-squad data rather than a written summary, every past week remains browsable indefinitely with no extra storage.
 
 ## PWA
