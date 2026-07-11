@@ -1,14 +1,27 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  User 
+import {
+  onAuthStateChanged,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  signOut,
+  User,
 } from 'firebase/auth';
+import { toast } from 'sonner';
 import { auth } from '@/lib/firebase';
+
+function getAuthErrorMessage(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === 'auth/unauthorized-domain') {
+    return 'This domain is not yet authorized for sign-in. Contact the app admin.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network error during sign-in. Check your connection and try again.';
+  }
+  return 'Sign-in failed. Please try again.';
+}
 
 interface AuthContextType {
   user: User | null;
@@ -26,6 +39,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    getRedirectResult(auth).catch((error) => {
+      console.error('Google sign-in redirect failed:', error);
+      toast.error(getAuthErrorMessage(error));
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
@@ -41,7 +59,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      // Popups are unreliable on mobile browsers and inside installed PWAs
+      // (frequently blocked or silently closed) — redirect works everywhere.
+      await signInWithRedirect(auth, provider);
+    } catch (error) {
+      console.error('Google sign-in failed:', error);
+      toast.error(getAuthErrorMessage(error));
+    }
   };
 
   const logout = async () => {
