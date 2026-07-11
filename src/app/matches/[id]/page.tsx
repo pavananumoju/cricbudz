@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Trophy, ChevronUp, Lock } from 'lucide-react';
+import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getMatchById, getPlayersByTeams, saveUserSquad, getUserSquads } from '@/services/dataService';
 import { Player, Match } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, getMatchTimeStatus } from '@/lib/utils';
 import { useDev } from '@/context/DevContext';
 import { Sheet } from '@/components/ui/Sheet';
 
@@ -41,7 +41,7 @@ function getTeamBrand(teamShortName: string) {
 
 export default function SquadDraftPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string | null>(null);
-  const { dateOverride } = useDev();
+  const { getEffectiveNow } = useDev();
   const [match, setMatch] = useState<Match | null>(null);
   const [team1Players, setTeam1Players] = useState<Player[]>([]);
   const [team2Players, setTeam2Players] = useState<Player[]>([]);
@@ -81,14 +81,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     fetchData();
   }, [id]);
 
-  const getEffectiveNow = () => {
-    if (!dateOverride) return new Date();
-    const now = new Date();
-    const timeStr = now.toISOString().split('T')[1];
-    return new Date(`${dateOverride}T${timeStr}`);
-  };
-
-  const isLocked = match ? new Date(match.date).getTime() - getEffectiveNow().getTime() < 30 * 60 * 1000 : false;
+  const timeStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
+  const isCompleted = timeStatus === 'completed';
+  const isLocked = timeStatus !== 'open';
 
   const selectPlayer = (player: Player) => {
     if (isLocked) return;
@@ -123,6 +118,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   };
 
   const checkStatusDetails = (): { canSubmit: boolean; message: string } => {
+    if (isCompleted) {
+      return { canSubmit: false, message: 'This match is complete. No further changes are permitted.' };
+    }
     if (isLocked) {
       return { canSubmit: false, message: 'This arena is locked. No further changes are permitted.' };
     }
@@ -206,7 +204,12 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
             </h2>
             <p className="text-[9px] text-muted font-bold tracking-widest uppercase">Trio Selection</p>
           </div>
-          {isLocked ? (
+          {isCompleted ? (
+            <div className="flex items-center gap-1 shrink-0 text-muted">
+              <CheckCircle2 size={13} />
+              <span className="text-[10px] font-display font-black uppercase tracking-tight">Completed</span>
+            </div>
+          ) : isLocked ? (
             <div className="flex items-center gap-1 shrink-0 text-danger">
               <Lock size={13} />
               <span className="text-[10px] font-display font-black uppercase tracking-tight">Locked</span>
@@ -218,7 +221,16 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
             </div>
           )}
         </div>
-        {isLocked && (
+        {isCompleted ? (
+          <div className="bg-surface-hover border-t border-border">
+            <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
+              <CheckCircle2 size={11} className="text-muted shrink-0" />
+              <p className="text-[9px] font-bold text-muted uppercase tracking-wide">
+                Match completed — your final trio is shown below
+              </p>
+            </div>
+          </div>
+        ) : isLocked ? (
           <div className="bg-danger-tint border-t border-danger/20">
             <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
               <Lock size={11} className="text-danger shrink-0" />
@@ -227,7 +239,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
               </p>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       <main className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-4">
@@ -309,12 +321,18 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
         onClick={() => setSheetOpen(true)}
         className={cn(
           'fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl border-t pb-safe transition-colors lg:hidden',
-          isLocked ? 'bg-danger-tint/90 border-danger/20' : 'bg-surface/95 border-border active:bg-surface-hover'
+          isCompleted
+            ? 'bg-surface/95 border-border active:bg-surface-hover'
+            : isLocked
+            ? 'bg-danger-tint/90 border-danger/20'
+            : 'bg-surface/95 border-border active:bg-surface-hover'
         )}
       >
         <div className="max-w-md mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            {isLocked ? (
+            {isCompleted ? (
+              <CheckCircle2 size={14} className="text-muted" />
+            ) : isLocked ? (
               <Lock size={14} className="text-danger" />
             ) : (
               <div className="flex gap-1">
@@ -326,11 +344,11 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                 ))}
               </div>
             )}
-            <span className={cn('text-xs font-display font-black uppercase tracking-tight', isLocked && 'text-danger')}>
-              {isLocked ? 'Arena Locked' : `${selectedPlayers.length}/3 Selected ${mvpId ? '· MVP Set' : ''}`}
+            <span className={cn('text-xs font-display font-black uppercase tracking-tight', isLocked && !isCompleted && 'text-danger')}>
+              {isCompleted ? 'Match Completed' : isLocked ? 'Arena Locked' : `${selectedPlayers.length}/3 Selected ${mvpId ? '· MVP Set' : ''}`}
             </span>
           </div>
-          <span className={cn('text-xs font-display font-black flex items-center gap-1', isLocked ? 'text-danger' : 'text-primary')}>
+          <span className={cn('text-xs font-display font-black flex items-center gap-1', isLocked && !isCompleted ? 'text-danger' : 'text-primary')}>
             {isLocked ? 'View' : 'Review'}
             <ChevronUp size={15} />
           </span>

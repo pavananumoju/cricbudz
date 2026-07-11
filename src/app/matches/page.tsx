@@ -5,10 +5,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getMatches } from '@/services/dataService';
 import { Match } from '@/types';
 import Link from 'next/link';
-import { Trophy, Zap, MapPin, Calendar, ChevronRight } from 'lucide-react';
-import { getTeamLogo } from '@/lib/utils';
+import { Trophy, Zap, MapPin, Calendar, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useDev } from '@/context/DevContext';
 
 const VENUES: Record<string, { city: string; stadium: string }> = {
   'Eden Gardens': { city: 'Kolkata', stadium: 'Eden Gardens' },
@@ -35,6 +37,7 @@ function getVenueDetails(venue: string | undefined | null) {
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  const { getEffectiveNow } = useDev();
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -83,6 +86,9 @@ export default function MatchesPage() {
           <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-3">
             {matches.map((match, idx) => {
               const venue = getVenueDetails(match.venue);
+              const timeStatus = match.date ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
+              const isCompleted = timeStatus === 'completed';
+              const isLocked = timeStatus === 'locked';
               return (
                 <motion.div
                   key={match.id}
@@ -91,7 +97,15 @@ export default function MatchesPage() {
                   transition={{ delay: Math.min(idx, 6) * 0.04 }}
                 >
                   <Link href={`/matches/${match.id}`}>
-                    <Card className="p-4 active:scale-[0.99] transition-transform">
+                    <Card className={cn('p-4 active:scale-[0.99] transition-transform', isCompleted && 'opacity-60')}>
+                      {(isCompleted || isLocked) && (
+                        <div className="flex justify-end mb-2 -mt-1">
+                          <Badge variant={isCompleted ? 'neutral' : 'danger'}>
+                            {isCompleted ? <CheckCircle2 size={10} /> : <Lock size={10} />}
+                            {isCompleted ? 'Completed' : 'Locked'}
+                          </Badge>
+                        </div>
+                      )}
                       <div className="flex items-center justify-center gap-5 pb-3 mb-3 border-b border-border">
                         <div className="flex flex-col items-center gap-1.5">
                           {/* eslint-disable-next-line @next/next/no-img-element */}

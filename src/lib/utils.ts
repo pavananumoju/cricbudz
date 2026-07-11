@@ -5,6 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Squads lock 30 minutes before the official match start.
+export const SQUAD_LOCK_WINDOW_MS = 30 * 60 * 1000;
+// We don't sync live ball-by-ball match state, so "completed" is inferred
+// from a typical T20 match's toss-to-finish duration, with a buffer.
+export const ASSUMED_MATCH_DURATION_MS = 4 * 60 * 60 * 1000;
+
+export type MatchTimeStatus = 'open' | 'locked' | 'completed';
+
+export function getMatchTimeStatus(matchDate: string | Date, now: Date = new Date()): MatchTimeStatus {
+  const start = new Date(matchDate).getTime();
+  const nowTime = now.getTime();
+  if (nowTime >= start + ASSUMED_MATCH_DURATION_MS) return 'completed';
+  if (start - nowTime < SQUAD_LOCK_WINDOW_MS) return 'locked';
+  return 'open';
+}
+
 export function getTeamLogo(teamCode: string, logoId?: number): string {
   if (logoId) {
     return `https://static.cricbuzz.com/a/img/v1/72x72/i1/c${logoId}/team.jpg`;

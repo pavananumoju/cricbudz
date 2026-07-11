@@ -14,7 +14,7 @@ import {
   PlusCircle,
   RefreshCw,
 } from 'lucide-react';
-import { cn, getTeamLogo } from '@/lib/utils';
+import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
 import { getUserSquads, getMatches, getPlayers } from '@/services/dataService';
 import { UserSquad, Match, Player } from '@/types';
 import { useDev } from '@/context/DevContext';
@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 export default function Dashboard() {
-  const { dateOverride } = useDev();
+  const { getEffectiveNow } = useDev();
   const { isAdmin } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [squads, setSquads] = useState<(UserSquad & { match?: Match })[]>([]);
@@ -142,13 +142,6 @@ export default function Dashboard() {
     );
   }
 
-  const getEffectiveNow = () => {
-    if (!dateOverride) return new Date();
-    const now = new Date();
-    const timeStr = now.toISOString().split('T')[1];
-    return new Date(`${dateOverride}T${timeStr}`);
-  };
-
   const effectiveNow = getEffectiveNow();
   const nowTime = effectiveNow.getTime();
 
@@ -240,8 +233,9 @@ export default function Dashboard() {
           <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-4">
             {displayData.map((data, idx) => {
               if (!data.match) return null;
-              const mDate = new Date(data.match.date).getTime();
-              const isLocked = mDate - nowTime < 30 * 60 * 1000;
+              const timeStatus = getMatchTimeStatus(data.match.date, effectiveNow);
+              const isCompleted = timeStatus === 'completed';
+              const isLocked = timeStatus !== 'open';
               const hasSquad = !!data.squad;
               const label = getMatchLabel(data.match);
 
@@ -259,8 +253,8 @@ export default function Dashboard() {
                         <p className="text-[11px] font-black text-primary uppercase tracking-wider leading-none">{label.base}</p>
                         <p className="text-[9px] font-bold text-muted uppercase tracking-wider mt-1 truncate">{label.suffix}</p>
                       </div>
-                      <Badge variant={isLocked ? 'danger' : 'success'} dot>
-                        {isLocked ? 'Locked' : 'Live'}
+                      <Badge variant={isCompleted ? 'neutral' : isLocked ? 'danger' : 'success'} dot={!isCompleted}>
+                        {isCompleted ? 'Completed' : isLocked ? 'Locked' : 'Live'}
                       </Badge>
                     </div>
 
@@ -318,7 +312,7 @@ export default function Dashboard() {
                           {hasSquad ? 'Edit Trio' : 'Draft Trio'}
                         </Link>
                       ) : (
-                        <span className="text-[9px] text-muted italic">Finalized</span>
+                        <span className="text-[9px] text-muted italic">{isCompleted ? 'Completed' : 'Finalized'}</span>
                       )}
                     </div>
                   </Card>
