@@ -103,10 +103,10 @@ export default function AdminPage() {
               onChange={(e) => setInputValue(e.target.value)}
               className="flex-1 min-w-0 bg-surface-hover border border-border rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
             />
-            <Button onClick={handleSave} size="md" className="px-4">
+            <Button onClick={handleSave} size="md" className="px-4" aria-label="Save date override">
               <Save size={15} />
             </Button>
-            <Button onClick={handleClear} variant="destructive" size="md" className="px-3.5" title="Clear Override">
+            <Button onClick={handleClear} variant="destructive" size="md" className="px-3.5" title="Clear Override" aria-label="Clear date override">
               <Trash2 size={15} />
             </Button>
           </div>
@@ -170,7 +170,7 @@ export default function AdminPage() {
                   onChange={(e) => setVisDate(e.target.value)}
                   className="flex-1 min-w-0 bg-surface-hover border border-border rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
                 />
-                <Button onClick={handleSaveVisibility} size="md" className="px-4" disabled={visSaving}>
+                <Button onClick={handleSaveVisibility} size="md" className="px-4" disabled={visSaving} aria-label="Save visibility settings">
                   <Save size={15} />
                 </Button>
               </div>

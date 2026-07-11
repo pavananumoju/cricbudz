@@ -5,6 +5,7 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCustomToken,
   getRedirectResult,
   GoogleAuthProvider,
   signOut,
@@ -65,6 +66,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  // Playwright E2E tests run against the Firebase Auth Emulator and can't
+  // drive a real Google OAuth popup — this lets a test sign in via a custom
+  // token minted by the emulator-only seed script (e2e/seed.ts). It's a
+  // no-op (never attached) unless NEXT_PUBLIC_USE_FIREBASE_EMULATOR is set,
+  // which is never true in a real deployment.
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR !== 'true') return;
+    (window as unknown as { __testSignInWithCustomToken?: (token: string) => Promise<unknown> }).__testSignInWithCustomToken = (token: string) =>
+      signInWithCustomToken(auth, token);
   }, []);
 
   const loginWithGoogle = async () => {

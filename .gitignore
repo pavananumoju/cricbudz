@@ -6,3 +6,11 @@ node_modules
 tsconfig.tsbuildinfo
 .vercel
 .env*
+e2e/.tokens.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+playwright-report/
+test-results/
+blaze-init.json

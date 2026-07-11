@@ -122,6 +122,7 @@ export default function SelectedSlots({
                     <button
                       type="button"
                       onClick={() => onSetMvp(player.id)}
+                      aria-label={`Set ${player.name} as MVP`}
                       className={cn(
                         "w-6 h-6 rounded-lg flex items-center justify-center transition-all",
                         isAssignedMvp
@@ -135,6 +136,7 @@ export default function SelectedSlots({
                     <button
                       type="button"
                       onClick={() => onRemove(player.id)}
+                      aria-label={`Remove ${player.name} from trio`}
                       className="w-6 h-6 rounded-lg bg-surface-hover hover:bg-danger-tint text-muted hover:text-danger flex items-center justify-center transition-all"
                     >
                       <X size={11} />

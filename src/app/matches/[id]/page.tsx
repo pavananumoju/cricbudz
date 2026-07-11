@@ -15,6 +15,7 @@ import {
 } from '@/services/dataService';
 import { Player, Match, UserSquad } from '@/types';
 import { cn, getMatchTimeStatus } from '@/lib/utils';
+import { SQUAD_TARGET_SIZE, checkDualFranchiseViolation, validateSquad } from '@/lib/draftRules';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
 import { Sheet } from '@/components/ui/Sheet';
@@ -23,8 +24,6 @@ import { Card } from '@/components/ui/Card';
 import PlayerCard from './_components/PlayerCard';
 import SelectedSlots from './_components/SelectedSlots';
 import SubmissionControl from './_components/SubmissionControl';
-
-const SQUAD_TARGET_SIZE = 3;
 
 const TEAM_BRANDS: Record<string, { imageId: string; textClass: string; bgClass: string; borderClass: string; accentColor: string }> = {
   MI: { imageId: 'mi', textClass: 'text-blue-600 dark:text-blue-400', bgClass: 'bg-blue-500/10', borderClass: 'border-blue-500/30', accentColor: '#004ba0' },
@@ -118,11 +117,10 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       toast.error('Trio slots are full. Remove a player first.');
       return;
     }
-    if (selectedPlayers.length === SQUAD_TARGET_SIZE - 1) {
-      const currentTeams = selectedPlayers.map((p) => p.team.toUpperCase());
-      if (currentTeams[0] === currentTeams[1] && currentTeams[0] === player.team.toUpperCase()) {
-        const otherTeam = player.team.toUpperCase() === match?.team1.toUpperCase() ? match?.team2 : match?.team1;
-        toast.error(`Add a player from ${otherTeam} to meet the dual-franchise rule.`);
+    if (match) {
+      const violation = checkDualFranchiseViolation(selectedPlayers, player, match.team1, match.team2);
+      if (violation) {
+        toast.error(violation);
         return;
       }
     }
@@ -140,24 +138,8 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     setMvpId(playerId);
   };
 
-  const checkStatusDetails = (): { canSubmit: boolean; message: string } => {
-    if (isCompleted) {
-      return { canSubmit: false, message: 'This match is complete. No further changes are permitted.' };
-    }
-    if (isLocked) {
-      return { canSubmit: false, message: 'This arena is locked. No further changes are permitted.' };
-    }
-    if (selectedPlayers.length < SQUAD_TARGET_SIZE) {
-      return { canSubmit: false, message: `Add ${SQUAD_TARGET_SIZE - selectedPlayers.length} more player(s) to complete your trio.` };
-    }
-    if (new Set(selectedPlayers.map((p) => p.team.toUpperCase())).size < 2) {
-      return { canSubmit: false, message: 'Your trio must include at least 1 player from each franchise.' };
-    }
-    if (!mvpId) {
-      return { canSubmit: false, message: 'Nominate your Trio MVP with the lightning bolt icon.' };
-    }
-    return { canSubmit: true, message: 'Your Trio Draft looks solid! Ready to deploy.' };
-  };
+  const checkStatusDetails = (): { canSubmit: boolean; message: string } =>
+    validateSquad(selectedPlayers, mvpId, { isLocked, isCompleted });
 
   const handleSave = async () => {
     const status = checkStatusDetails();

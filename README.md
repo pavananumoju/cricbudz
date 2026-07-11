@@ -93,9 +93,10 @@ ipl-fantasy-arena/
 │   │   └── ThemeContext.tsx          # Auto (system) + manual dark/light toggle
 │   │
 │   ├── lib/
-│   │   ├── firebase.ts               # Client SDK (reads, user-squad writes)
+│   │   ├── firebase.ts               # Client SDK (reads, user-squad writes); connects to emulators in E2E
 │   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
 │   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
+│   │   ├── draftRules.ts             # Pure, unit-tested squad validation (dual-franchise, MVP, etc.)
 │   │   └── utils.ts                  # cn(), getTeamLogo(), getMatchTimeStatus() (open/locked/completed)
 │   │
 │   ├── services/
@@ -109,8 +110,14 @@ ipl-fantasy-arena/
 ├── scripts/
 │   └── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
 │
+├── e2e/                               # Playwright specs, run against the Firebase Emulator Suite
+│   ├── seed.ts / testData.ts         # Fixed test users/matches/players seeded before each run
+│   ├── fixtures.ts                   # signInAsUser/signInAsUser2/signInAsAdmin test fixtures
+│   └── *.spec.ts
+├── vitest.config.ts                  # Unit/component test config (jsdom + RTL)
+├── playwright.config.ts              # E2E test config (webServer + globalSetup seeding)
 ├── firestore.rules                   # Deployed via `firebase deploy --only firestore:rules`
-├── firebase.json / .firebaserc       # Firebase CLI project/rules config
+├── firebase.json / .firebaserc       # Firebase CLI project/rules/emulator config
 ├── public/
 │   ├── manifest.json                 # PWA manifest
 │   └── icon-*.png                    # PWA icons (placeholder artwork)
@@ -262,7 +269,27 @@ npm run start    # run production build
 npm run lint     # next lint
 ```
 
-There is no test suite configured in this repo.
+## Testing
+
+**Unit/component tests (Vitest + React Testing Library)** — no setup needed, pure functions and components in isolation:
+
+```bash
+npm run test          # run once
+npm run test:watch    # watch mode
+```
+
+Covers `getMatchTimeStatus()` (open/locked/completed logic), the draft validation rules (`src/lib/draftRules.ts` — dual-franchise check, squad completeness), and `PlayerCard`'s selected/disabled states. Add new test files as `*.test.ts(x)` next to the code they cover.
+
+**End-to-end tests (Playwright + Firebase Emulator Suite)** — drives a real browser through actual signed-in flows (draft → lock → submit, the submission-visibility toggle across two separate simulated users). Runs against the emulator, never real Firestore data:
+
+```bash
+npm run emulators   # start Auth + Firestore emulators (needs Java 21+; keep running)
+npm run test:e2e    # in another terminal — seeds the emulator, then runs the suite
+```
+
+How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment.
+
+`playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races.
 
 ## Deploying
 
