@@ -84,11 +84,15 @@ export default function LeaderboardPage() {
           <ChevronLeft size={16} />
         </button>
         <div className="text-center min-w-0">
-          <div className="flex items-center justify-center gap-2">
-            <p className="font-display font-black text-base uppercase italic tracking-tight truncate">
+          <div className="flex items-center justify-center flex-wrap gap-x-2 gap-y-1">
+            <p className="font-display font-black text-base uppercase italic tracking-tight truncate min-w-0">
               {weekNumber !== null ? `Week ${weekNumber}` : 'This Week'}
             </p>
-            {isCurrentWeek && <Badge variant="success" dot>Live</Badge>}
+            {isCurrentWeek && (
+              <Badge variant="success" dot className="shrink-0">
+                Live
+              </Badge>
+            )}
           </div>
           <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-0.5">{formatWeekLabel(weekRange)}</p>
         </div>
