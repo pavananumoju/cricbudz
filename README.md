@@ -1,28 +1,10 @@
 # CricBudz 🏏
 
-Fantasy cricket application powered by live IPL match and player data using Cricbuzz APIs via RapidAPI.
+A private, invite-only fantasy cricket app for a small friend group, built around the IPL. Not a public product — no SEO/scale concerns by design (see `PROGRESS.md` for that and other standing architecture decisions).
 
----
+Each match, every user drafts a 3-player "trio" (from both playing teams), tags one player as MVP (2x points), and competes on a leaderboard. Live fixture/roster data comes from Cricbuzz via RapidAPI.
 
-# Project Overview
-
-CricBudz is a fantasy cricket platform focused on the Indian Premier League (IPL). The app currently supports:
-
-* Live IPL match schedule sync
-* Player sync by IPL team
-* Firebase-based authentication and Firestore storage
-* Match cards with player listing
-* User login support
-* Firestore-backed match/player data instead of mock data
-
-The project is designed to scale toward:
-
-* 3-player fantasy squad creation
-* MVP player tagging
-* AI-assisted player recommendations
-* Match analytics and insights
-* Fantasy scoring engine
-* Live match intelligence
+**Production:** https://ipl-fantasy-arena.vercel.app
 
 ---
 
@@ -30,319 +12,223 @@ The project is designed to scale toward:
 
 ## Frontend
 
-* Next.js 15
-* React
-* TypeScript
-* Tailwind CSS
+* Next.js 15.5.20 (App Router)
+* React 18, TypeScript
+* Tailwind CSS v4 (CSS-first config via `@theme`, no JS config file)
+* `motion` (framer-motion successor) for sheets/animations
+* `sonner` for toast notifications
+* Installable PWA (manifest + icons; no service worker/offline support by design)
 
 ## Backend / APIs
 
-* Next.js App Router API routes
-* RapidAPI (Cricbuzz Cricket API)
-* https://rapidapi.com/cricketapilive/api/cricbuzz-cricket
+* Next.js App Router route handlers
+* RapidAPI — Cricbuzz Cricket API (`cricbuzz-cricket.p.rapidapi.com`)
 
 ## Database & Authentication
 
-* Firebase Firestore
-* Firebase Authentication
-* Firebase Admin SDK (server-side writes)
-* https://console.firebase.google.com/u/0/project/gen-lang-client-0759118211/overview?utm_source=chatgpt.com
+* Firebase Firestore (named database, not `(default)`)
+* Firebase Authentication (Google sign-in only — popup primary, redirect fallback if the popup is blocked)
+* Firebase Admin SDK (server-only writes, used by `/api/sync`)
+* Firebase custom claims (`admin: true`) gate the one real admin action (fixture sync) — enforced server-side, not just hidden in the UI
 
-## Hosting (Recommended)
+## Hosting
 
-* Vercel (Frontend + API routes)
-* Firebase (Auth + Firestore)
+* **Vercel** — frontend + API routes (`vercel --prod` from the repo; also connected to the `pavananumoju/cricbudz` GitHub repo for automatic preview deploys)
+* **Firebase** — Auth + Firestore. Firestore Security Rules are deployed via the Firebase CLI (`firebase deploy --only firestore:rules`), configured in `firebase.json`/`.firebaserc`.
+
+There is **no AI integration** in this app (an earlier Gemini-based recommendation feature was removed entirely — not part of the product direction).
 
 ---
 
 # Project Structure
 
 ```txt
-# Project Structure
-cricbudz/
+ipl-fantasy-arena/
 │
 ├── src/
-│   ├── app/                          # Next.js App Router Core
+│   ├── app/
 │   │   ├── api/
-│   │   │   ├── recommend/            # Gemini AI Suggestion Engine
-│   │   │   └── sync/                 # Server-side ETL pipeline (Matches + Players)
+│   │   │   └── sync/                 # Admin-only ETL: Cricbuzz -> Firestore (matches + players)
+│   │   │
+│   │   ├── admin/
+│   │   │   └── page.tsx              # Dev Control Center: date override, submission visibility toggle
 │   │   │
 │   │   ├── dashboard/
-│   │   │   └── page.tsx             # Focused Arena Status & Primary Draft
+│   │   │   └── page.tsx              # Today's Arena, quick links, other drafts (with delete)
 │   │   │
 │   │   ├── leaderboard/
-│   │   │   └── page.tsx             # Dynamic global strategist rankings
+│   │   │   └── page.tsx              # Global rankings (still mock data — not wired to real scores yet)
 │   │   │
 │   │   ├── matches/
 │   │   │   ├── [id]/
 │   │   │   │   ├── _components/
-│   │   │   │   │   ├── PlayerCard.tsx        # Responsive roster item with stats
-│   │   │   │   │   ├── PlayerRosterPools.tsx  # Categorized team player lists
-│   │   │   │   │   ├── SelectedSlots.tsx     # Trio row state tracker
-│   │   │   │   │   ├── StickySelectionHeader.tsx # Floating match info & back button
-│   │   │   │   │   ├── SubmissionControl.tsx # Active rule status & match locking
-│   │   │   │   │   └── SubmissionSidebar.tsx # Desktop side-panel for squad management
-│   │   │   │   └── page.tsx         # Trio Selection Arena Parent Controller
-│   │   │   └── page.tsx             # Live fixture schedules
+│   │   │   │   │   ├── PlayerCard.tsx        # Roster item (selectable, disables when locked)
+│   │   │   │   │   ├── SelectedSlots.tsx     # Trio slots, MVP tagging, locked/read-only mode
+│   │   │   │   │   └── SubmissionControl.tsx # Validation status + Lock Trio action
+│   │   │   │   └── page.tsx          # Trio draft arena — two-team browsing, sticky bottom sheet on
+│   │   │   │                         # mobile, persistent sidebar on desktop; open/locked/completed states
+│   │   │   └── page.tsx              # Fixture list, per-card status badges
 │   │   │
 │   │   ├── rules/
-│   │   │   └── page.tsx             # Official Trio Format guidelines
+│   │   │   └── page.tsx              # Scoring rules copy
 │   │   │
-│   │   ├── globals.css              # Typography & customized component tokens
-│   │   ├── layout.tsx               # Base HTML structure & viewport injection
-│   │   ├── loading.tsx              # Global arena entry transitions
-│   │   └── page.tsx                 # Application gateway
+│   │   ├── globals.css               # Design tokens (light/dark), Tailwind v4 @theme
+│   │   ├── layout.tsx                # Root layout, theme script, PWA metadata, Toaster
+│   │   ├── loading.tsx
+│   │   └── page.tsx                  # Landing page (Google sign-in)
 │   │
 │   ├── components/
-│   │   └── Navbar.tsx               # Primary navigation abstraction
+│   │   ├── NavigationWrapper.tsx     # Chrome shell (TopBar/BottomNav), draft-page bypass
+│   │   ├── TopBar.tsx                # Header + desktop nav links + profile trigger
+│   │   ├── BottomNav.tsx             # Mobile tab bar (hidden on desktop, TopBar covers nav there)
+│   │   ├── ProfileSheet.tsx          # Theme toggle, admin link, logout
+│   │   └── ui/                       # Button, Card, Badge, Sheet, Skeleton
 │   │
 │   ├── config/
-│   │   └── cricket.ts               # IPL Context Configuration (Series/Year IDs)
+│   │   └── cricket.ts                # IPL_SERIES_ID / IPL_SEASON — the one place to roll to a new season
 │   │
 │   ├── context/
-│   │   └── AuthContext.tsx          # React Session state broadcast layer
+│   │   ├── AuthContext.tsx           # Firebase Auth (Google), isAdmin from custom claims
+│   │   ├── DevContext.tsx            # localStorage-backed date override, getEffectiveNow()
+│   │   └── ThemeContext.tsx          # Auto (system) + manual dark/light toggle
 │   │
 │   ├── lib/
-│   │   ├── firebase-admin.ts        # Privileged Server-Side Admin SDK Core
-│   │   ├── firebase.ts              # Client-Side configuration portal
-│   │   ├── gemini.ts                # Google Generative AI utility
-│   │   ├── rapidapi.ts              # Base Axios instances for Cricbuzz routing
-│   │   └── utils.ts                 # Classname mergers (clsx/tailwind-merge)
+│   │   ├── firebase.ts               # Client SDK (reads, user-squad writes)
+│   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
+│   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
+│   │   └── utils.ts                  # cn(), getTeamLogo(), getMatchTimeStatus() (open/locked/completed)
 │   │
 │   ├── services/
-│   │   ├── cricketApi.ts           # RapidAPI abstraction for fixtures/rosters
-│   │   └── dataService.ts           # Firestore transactional read/write abstractions
+│   │   └── dataService.ts            # All client Firestore reads/writes (matches, players, userSquads)
 │   │
 │   ├── types/
-│   │   └── index.ts                 # Declarations for Matches, Players, and Squads
+│   │   └── index.ts                  # Player, Match, UserSquad, VisibilitySettings
 │   │
-│   └── firebase-applet-config.json  # Environment specific Firebase config
+│   └── firebase-applet-config.json   # Client-side Firebase config (not env vars — see src/lib/firebase.ts)
 │
-├── next.config.ts                  # Remote pattern policies & Next.js engine settings
-├── package.json                    # Package metadata & script commands
-└── README.md                       # Documentation hub
+├── scripts/
+│   └── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
+│
+├── firestore.rules                   # Deployed via `firebase deploy --only firestore:rules`
+├── firebase.json / .firebaserc       # Firebase CLI project/rules config
+├── public/
+│   ├── manifest.json                 # PWA manifest
+│   └── icon-*.png                    # PWA icons (placeholder artwork)
+├── CLAUDE.md                         # Instructions/architecture notes for AI coding agents
+├── PROGRESS.md                       # Standing architecture decisions (scope, DB choice, etc.)
+└── README.md                         # This file
 ```
 
 ---
 
-# Current Features
+# Core Features (implemented)
 
-## 1. Login Feature
+## Auth
 
-Authentication is implemented using:
+* Google sign-in only, via Firebase Auth.
+* `signInWithPopup` primary (works in normal browser tabs without the cross-origin storage issues redirect-based flows hit on mobile Safari/Chrome), falling back to `signInWithRedirect` only if the popup itself is blocked/unsupported. All failures surface a toast instead of failing silently.
+* Admin status (`isAdmin`) comes from a Firebase custom claim (`admin: true`), checked via `getIdTokenResult()` — not a hardcoded email check. Set via `scripts/set-admin-claim.mjs`.
 
-* Firebase Authentication
+## Trio Draft Arena (`/matches/[id]`)
 
-Current flow:
+* Exactly 3 players, from exactly 2 teams (not all 3 from one side), one tagged MVP (2x points) before locking.
+* **Squads lock 30 minutes before match start ("toss")** — enforced client-side today (see Known Limitations).
+* Match status is a 3-way state, not just locked/unlocked:
+  * **Open** — before the lock window, fully editable.
+  * **Locked** — inside the lock window through an assumed ~4h match duration (no live ball-by-ball sync exists, so "in progress" is inferred, not observed). Red banner, grayed player cards, lock icons.
+  * **Completed** — after the assumed match duration has elapsed. Neutral/muted styling, distinct copy ("Match Completed" vs "Arena Locked"), so a finished match doesn't read as merely "locked."
+* Two-team side-by-side browsing on all screen sizes; mobile uses a sticky bottom bar + bottom sheet for reviewing/submitting the trio, desktop shows a persistent sidebar instead.
+* Users can delete a saved draft (dashboard's "Other Drafts" section, tap-to-confirm), gated to before-toss only — same rule as editing.
 
-```txt
-User Login
-→ Firebase Auth
-→ User Session
-→ Fantasy Squad Save Capability
-```
+## Admin / Dev Control Center (`/admin`)
 
-Relevant file:
+* Gated by `isAdmin` (redirects non-admins), with real server-side enforcement on the one privileged action (`/api/sync` requires a valid ID token with the `admin` claim).
+* **System date override** — simulates "today" app-wide (real clock still ticks within that simulated day) for testing lock/completion logic without waiting for real IPL dates.
+* **Submission visibility toggle** — see below.
 
-```txt
-src/lib/firebase.ts
-```
+## Submission Visibility Toggle
 
-Current supported feature:
+Prevents users from seeing (and copying) each other's trio picks before toss on a day the admin flags as sensitive (e.g. a close title race late in the week). Set from a "Submission Visibility" card on `/admin`:
 
-* Logged-in user squad saving
+* Admin sets `{ hideUntilToss: true, date: "YYYY-MM-DD" }` in a single `settings/visibility` document.
+* The toggle only affects **that one day's** not-yet-toss matches. Past/completed matches are **always** visible to everyone regardless of the toggle. Once toss passes for a match, it becomes visible to everyone too, toggle or not.
+* No cron/scheduled job needed to "reset" it — because the toggle carries the specific date it applies to, it's automatically inert for every other day without any manual cleanup.
+* **Enforced in `firestore.rules`** (not just hidden in the UI) — a squad doc carries denormalized `matchTimestamp`/`matchDay` fields so the rule can evaluate "has toss passed" / "does the toggle apply today" without extra reads. See Firestore Collections below.
+* Surfaced on the draft page (`/matches/[id]`) as a "Squad Room" section showing every other user's submitted trio for that match (or an explanatory hidden-until-toss message) once visible.
+* Caveat: the Dev Control Center's date override is a client-only simulation — it does **not** change what time Firestore rules see (`request.time` is always the real server clock). Testing visibility transitions with the date override can therefore look inconsistent between the UI's "locked/completed" state and what the rules actually reveal; this is expected, not a bug.
 
-Future enhancements:
+## PWA
 
-* Google Sign-in
-* Guest mode
-* Profile page
-* Saved fantasy history
-* Trio Draft Arena (Selection & Validation)
-* MVP Tagging System (2x Points)
-* AI-Powered Squad Recommendations (Gemini 1.5 Flash)
-* Dynamic Leaderboards
-* Automatic Draft Locking (30m pre-match)
-
----
-
-## 2. IPL Match Sync
-
-### Route
-
-```txt
-/api/sync
-```
-
-File:
-
-```txt
-src/app/api/sync/route.ts
-```
-
-This route:
-
-1. Fetches IPL schedule
-2. Parses fixtures
-3. Stores matches in Firestore
-4. Fetches players for each IPL team
-5. Stores players in Firestore
-
-### API Called
-
-#### IPL Schedule
-
-Endpoint:
-
-```txt
-https://cricbuzz-cricket.p.rapidapi.com/series/v1/9241
-```
-
-Purpose:
-
-* Fetches IPL 2026 schedule
-* Includes league matches
-* Includes playoffs
-* Includes final
-
-Response includes:
-
-* Match ID
-* Team details
-* Venue
-* Match time
-* Match state
-* Series info
-
-#### Team Players
-
-Endpoint:
-
-```txt
-https://cricbuzz-cricket.p.rapidapi.com/teams/v1/{teamId}/players
-```
-
-Example:
-
-```txt
-https://cricbuzz-cricket.p.rapidapi.com/teams/v1/59/players
-```
-
-Purpose:
-
-Fetches:
-
-* Batters
-* Bowlers
-* All-rounders
-* Wicket keepers
-
-Used to populate fantasy player pool.
-
----
-
-# Database
-
-## Database Type
-
-Firebase Firestore
-
-## Database Name
-
-Named Firestore Database:
-
-```txt
-ai-studio-b7247bb1-86cb-432e-9975-eaf84ce93c2b
-```
-
-Project ID:
-
-```txt
-gen-lang-client-0759118211
-```
+* Installable (manifest + icons for 192/512/maskable/apple-touch). No service worker — offline support explicitly out of scope for now.
+* Mobile-first design: bottom tab bar on mobile, top nav links + no bottom bar on desktop, auto (system) + manual dark/light theme.
 
 ---
 
 # Firestore Collections
 
-## matches
+## `matches`
 
-Stores IPL fixtures.
-
-Example schema:
+Synced by `/api/sync` (Admin SDK only — Firestore rules deny client writes).
 
 ```json
 {
   "id": "152240",
   "seriesId": 9241,
   "team1Id": 255,
-  "team2Id": 59,
   "team1": "SRH",
+  "team2Id": 59,
   "team2": "RCB",
   "date": "2026-05-22T14:00:00.000Z",
   "venue": "Ground Name",
   "city": "Hyderabad",
-  "status": "Upcoming",
+  "status": "COMPLETE",
   "matchDesc": "67th Match",
   "seriesName": "Indian Premier League 2026",
-  "updatedAt": "timestamp"
+  "updatedAt": "2026-03-01T00:00:00.000Z"
 }
 ```
 
-## players
+Note: `status` here is whatever Cricbuzz reported *at sync time* — it does not update live. The app's own `open`/`locked`/`completed` UI state (`getMatchTimeStatus()` in `src/lib/utils.ts`) is computed client-side from `date` vs. the current time instead, since there's no live re-sync.
 
-Stores unique IPL players.
+## `players`
 
-Example schema:
+Synced alongside matches, keyed by Cricbuzz player ID. `price` is currently randomized (`8 + Math.random() * 3`) — no real pricing model yet.
 
-```json
-{
-  "id": "8497",
-  "name": "Virat Kohli",
-  "team": "RCB",
-  "teamId": 59,
-  "role": "BATSMEN",
-  "price": 10.5,
-  "battingStyle": "Right-hand bat",
-  "bowlingStyle": "Right-arm medium",
-  "imageId": 12345,
-  "updatedAt": "timestamp"
-}
-```
+## `userSquads`
 
-## userSquads
-
-Stores user fantasy teams.
-
-Example schema:
+Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid` on create/update/delete). Doc ID is `{userId}_{matchId}`, so one squad per user per match.
 
 ```json
 {
   "userId": "uid",
   "matchId": "152240",
-  "players": ["123", "456"],
+  "players": ["123", "456", "789"],
   "mvpId": "123",
-  "createdAt": 123456789
+  "createdAt": 1772400000000,
+  "matchTimestamp": "2026-05-22T14:00:00.000Z",
+  "matchDay": "2026-05-22"
 }
+```
+
+`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad.
+
+**Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day.
+
+## `settings/visibility`
+
+Single document, admin-writable only (`request.auth.token.admin == true`), readable by any signed-in user.
+
+```json
+{ "hideUntilToss": true, "date": "2026-04-18" }
 ```
 
 ---
 
 # Configuration
 
-## Cricket Config
+## `src/config/cricket.ts`
 
-File:
-
-```txt
-src/config/cricket.ts
-```
-
-Purpose:
-
-Central place to manage IPL season.
-
-Example:
+The single place to roll over to a new IPL season:
 
 ```ts
 export const CRICKET_CONFIG = {
@@ -351,338 +237,57 @@ export const CRICKET_CONFIG = {
 };
 ```
 
-To move to IPL 2027:
-
-Only update:
-
-```txt
-IPL_SERIES_ID
-IPL_SEASON
-```
-
-No other code changes required.
-
----
-
-# Environment Variables
-
-File:
-
-```txt
-.env.local
-```
-
-Required variables:
+## Environment Variables (`.env.local`)
 
 ```env
 RAPIDAPI_KEY=
 RAPIDAPI_HOST=cricbuzz-cricket.p.rapidapi.com
 
-NEXT_PUBLIC_GEMINI_API_KEY=
-
 FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY=
-FIREBASE_DATABASE_ID=
+FIREBASE_PRIVATE_KEY=      # keep \n escaped; firebase-admin.ts unescapes at runtime
+FIREBASE_DATABASE_ID=      # named Firestore database, not "(default)"
 ```
 
-### Variable Purpose
-
-#### RAPIDAPI_KEY
-
-Used to authenticate Cricbuzz API requests.
-
-#### RAPIDAPI_HOST
-
-RapidAPI Cricbuzz hostname.
-
-#### FIREBASE_PROJECT_ID
-
-Firebase project identifier.
-
-#### FIREBASE_CLIENT_EMAIL
-
-Firebase Admin SDK service account email.
-
-#### FIREBASE_PRIVATE_KEY
-
-Private key for Firebase Admin writes.
-
-#### FIREBASE_DATABASE_ID
-
-Named Firestore database ID.
-
----
-
-# Important Files
-
-## src/lib/rapidapi.ts
-
-Responsible for:
-
-* API calling
-* RapidAPI fetch logic
-* Cricbuzz endpoints
-
-Functions:
-
-```ts
-getIPLSeries()
-getTeamPlayers(teamId)
-```
-
----
-
-## src/app/api/sync/route.ts
-
-Responsible for:
-
-* Syncing IPL fixtures
-* Syncing players
-* Firestore writes
-
-Route:
-
-```txt
-/api/sync
-```
-
-Recommended usage:
-
-* Manual trigger during development
-* Scheduled job later
-
----
-
-## src/services/dataService.ts
-
-Responsible for:
-
-* Fetch matches
-* Fetch players
-* Save user squads
-* Get user squads
-
----
-
-## src/lib/firebase.ts
-
-Client-side Firebase.
-
-Used for:
-
-* Auth
-* Firestore reads
-
----
-
-## src/lib/firebase-admin.ts
-
-Server-side Firebase Admin SDK.
-
-Used for:
-
-* Secure Firestore writes
-* Batch updates
-
----
-
-# Current Working Flow
-
-```txt
-/api/sync
-↓
-Fetch IPL schedule
-↓
-Save matches
-↓
-Fetch team players
-↓
-Save players
-↓
-Frontend loads matches
-↓
-Click match
-↓
-Fetch players
-↓
-Display fantasy player pool
-```
-
----
-
-# Known Limitations
-
-Current app does NOT yet support:
-
-* Match scoring system (Post-match processing)
-* Live points during match
-* Playing XI updates (Toss detection)
-* Push Notifications
-* Player Profile stats/analytics
----
-
-# TODO / Future Scope
-
-## High Priority
-
-### Full Scoring Engine
-
-Implement points calculation:
-
-* Runs, Wickets, Catches, Strike Rate, Economy
-* Double points for selected MVP
-
-### Live Commentary & Stats
-
-Show:
-
-* Live ball-by-ball commentary (Server-side polling)
-* Live scoreboard on match pages
-
----
-
-## Medium Priority
-
-### Playing XI Updates
-
-After toss:
-
-* Replace unavailable players
-* Highlight confirmed XI
-
-### Match Insights
-
-Show:
-
-* Venue stats
-* Toss advantage
-* Player head-to-head
-
-### Notifications
-
-Notify user:
-
-* Match starting soon
-* Toss update
-* Squad deadline
-
----
-
-## Long-Term Features
-
-### Live Scoring Engine
-
-Calculate fantasy points.
-
-### Leaderboards
-
-Compete across users.
-
-### Match Intelligence
-
-Provide:
-
-* Venue insights
-* Team form analysis
-* Player trends
-* Head-to-head insights
-
-### Multi-Tournament Support
-
-Potential future support:
-
-* IPL
-* Champions Trophy
-* World Cup
-* BBL
-* PSL
+Client-side Firebase config comes from `src/firebase-applet-config.json`, not env vars (client Firebase API keys aren't secret — security is enforced by Firestore rules, not key secrecy).
 
 ---
 
 # Development Commands
 
-Run app:
-
 ```bash
-npm run dev
+npm run dev      # start dev server
+npm run build    # production build
+npm run start    # run production build
+npm run lint     # next lint
 ```
 
-Build:
+There is no test suite configured in this repo.
+
+## Deploying
 
 ```bash
-npm run build
+vercel --prod                              # deploy app to production
+firebase deploy --only firestore:rules     # deploy Firestore security rules
 ```
 
-Lint:
-
-```bash
-npm run lint
-```
+Both require being logged in (`vercel login`, `firebase login`) — see each CLI's own auth flow.
 
 ---
 
-# Git Branch Strategy
+# Known Limitations / Not Yet Built
 
-Recommended:
-
-```txt
-main
-├── feature/player-images
-├── feature/fantasy-rules
-├── feature/ai-team-selection
-├── feature/scoring-engine
-```
-
-Never work directly on `main`.
-
-Always:
-
-```bash
-git checkout main
-git pull
-git checkout -b feature/new-feature
-```
+* **30-minute pre-toss lock is UI-only** — not enforced by Firestore rules or a server check. A determined client could bypass it. Low risk for a private friend-group app, but worth knowing.
+* **Real match scoring is not implemented.** Investigated feasibility (2026-07-11): Cricbuzz's `mcenter/v1/{matchId}/scard` endpoint *does* return real structured per-player batting (runs/balls/fours/sixes/strike rate) and bowling (overs/wickets/economy/dot balls) stats for completed matches — so most of the `/rules` scoring table is buildable. Gaps found:
+  * Catches/run-outs/stumpings aren't separate structured fields — they're embedded in a free-text dismissal string (`outdec`, e.g. `"c Phil Salt b Jacob Duffy"`) and need parsing.
+  * "Direct Hit" (distinct from a regular run-out in the scoring rules) has no structured signal in the API — can't be reliably distinguished.
+  * Man of the Match wasn't found in any endpoint checked so far.
+* **Weekly leaderboard is not implemented.** `/leaderboard` is still hardcoded mock data. Planned design (see `PROGRESS.md`/Notion requirements doc): Monday–Sunday weeks, top scorer wins, next two are runners-up, history retained across weeks. Blocked on the scoring engine above.
+* **Scoring trigger is planned to be admin-initiated** (e.g. a "Finalize Match" button), not automatic — this app has no cron/background job infrastructure by design, and reliably auto-detecting "truly finished, not just rain-delayed" was judged not worth the complexity versus an admin just clicking a button.
+* Player `price` has no real pricing model (randomized at sync time).
 
 ---
 
-# Current Status
+# Standing Architecture Decisions
 
-✅ IPL schedule sync working
-
-✅ Firebase integration working
-
-✅ Firestore player sync working
-
-✅ Match cards & Selection Arena working
-
-✅ Trio Draft Validation (3 players, multiside)
-
-✅ MVP Tagging & Squad Persistence
-
-✅ Gemini AI Recommendations integration
-
-✅ Global Leaderboards UI
-
-✅ Match Auto-Lock mechanism (30m pre-toss)
-
-🚧 Scoring engine & live points pending
-
-🚧 Toss/XI detection pending
-
-# Technical Debt / Optimization TODO
-
-These are known improvements that are not urgent for MVP but recommended later.
-
-## 1. Replace `<img>` with `next/image`
-
-Current warnings from ESLint:
-
-```bash
-@next/next/no-img-element
-```
-
-## 2. Edge-Case Validation
-
-* Better handling for postponed/abandoned matches
-* Loading skeletons for leaderboard data expansion
+See `PROGRESS.md` for the reasoning behind decisions already made and **not** up for re-litigation without a new explicit ask — most notably: staying on Firebase (no Postgres/Prisma/Better Auth migration), no SEO/SSR work, and the private/invite-only scope.

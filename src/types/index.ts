@@ -40,6 +40,14 @@ export interface UserSquad {
   mvpId: string;     // Must point to one of the selected Player IDs
   createdAt: number;
   totalPoints?: number;
+  // Denormalized from the match at save time so Firestore rules can
+  // evaluate toss-time/visibility without an extra document read.
+  matchTimestamp: string; // match.date (ISO string)
+  matchDay: string;       // matchTimestamp truncated to YYYY-MM-DD
+  // Denormalized from the authenticated user at save time — the client
+  // SDK has no way to look up another user's profile by uid otherwise.
+  userDisplayName: string | null;
+  userPhotoURL: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -47,4 +55,9 @@ export interface LeaderboardEntry {
   displayName: string;
   points: number;
   rank: number;
+}
+
+export interface VisibilitySettings {
+  hideUntilToss: boolean;
+  date: string; // YYYY-MM-DD — the single day this hide rule applies to
 }

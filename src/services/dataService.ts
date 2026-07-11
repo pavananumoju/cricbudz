@@ -11,7 +11,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
-import { Player, Match, UserSquad } from '@/types';
+import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
 
 export async function getMatches(): Promise<Match[]> {
   try {
@@ -150,14 +150,17 @@ export async function getPlayersByTeams(
   }
 }
 
-export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt'>) {
-  const userId = auth.currentUser?.uid;
-  if (!userId) throw new Error('User not authenticated');
-  
-  const squadId = `${userId}_${squad.matchId}`;
+export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt' | 'matchDay' | 'userDisplayName' | 'userPhotoURL'>) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const squadId = `${user.uid}_${squad.matchId}`;
   await setDoc(doc(db, 'userSquads', squadId), {
     ...squad,
-    userId,
+    matchDay: squad.matchTimestamp.slice(0, 10),
+    userId: user.uid,
+    userDisplayName: user.displayName || null,
+    userPhotoURL: user.photoURL || null,
     createdAt: Date.now()
   });
 }
@@ -174,7 +177,7 @@ export async function getUserSquads(): Promise<UserSquad[]> {
   try {
     const userId = auth.currentUser?.uid;
     if (!userId) return [];
-    
+
     const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
     const snap = await getDocs(q);
     return snap.docs.map(d => d.data() as UserSquad);
@@ -182,4 +185,33 @@ export async function getUserSquads(): Promise<UserSquad[]> {
     console.error('getUserSquads error:', err);
     return [];
   }
+}
+
+// Returns every user's squad for a match. Firestore rules silently exclude
+// squads the current user isn't allowed to see yet (own squad, or others'
+// once toss has passed / the visibility toggle isn't active for that day) —
+// this never throws for a partially-visible result set.
+export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
+  try {
+    const q = query(collection(db, 'userSquads'), where('matchId', '==', matchId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as UserSquad);
+  } catch (err) {
+    console.error('getSquadsForMatch error:', err);
+    return [];
+  }
+}
+
+export async function getVisibilitySettings(): Promise<VisibilitySettings | null> {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'visibility'));
+    return snap.exists() ? (snap.data() as VisibilitySettings) : null;
+  } catch (err) {
+    console.error('getVisibilitySettings error:', err);
+    return null;
+  }
+}
+
+export async function setVisibilitySettings(settings: VisibilitySettings) {
+  await setDoc(doc(db, 'settings', 'visibility'), settings);
 }

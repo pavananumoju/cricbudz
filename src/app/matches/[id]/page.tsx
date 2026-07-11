@@ -2,13 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import { getMatchById, getPlayersByTeams, saveUserSquad, getUserSquads } from '@/services/dataService';
-import { Player, Match } from '@/types';
+import Image from 'next/image';
+import {
+  getMatchById,
+  getPlayersByTeams,
+  saveUserSquad,
+  getUserSquads,
+  getSquadsForMatch,
+  getVisibilitySettings,
+} from '@/services/dataService';
+import { Player, Match, UserSquad } from '@/types';
 import { cn, getMatchTimeStatus } from '@/lib/utils';
 import { useDev } from '@/context/DevContext';
+import { useAuth } from '@/context/AuthContext';
 import { Sheet } from '@/components/ui/Sheet';
+import { Card } from '@/components/ui/Card';
 
 import PlayerCard from './_components/PlayerCard';
 import SelectedSlots from './_components/SelectedSlots';
@@ -42,6 +52,7 @@ function getTeamBrand(teamShortName: string) {
 export default function SquadDraftPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string | null>(null);
   const { getEffectiveNow } = useDev();
+  const { user } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [team1Players, setTeam1Players] = useState<Player[]>([]);
   const [team2Players, setTeam2Players] = useState<Player[]>([]);
@@ -50,6 +61,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [otherSquads, setOtherSquads] = useState<UserSquad[]>([]);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [visibilityHiddenToday, setVisibilityHiddenToday] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -68,6 +82,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
         const t2 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team2.toUpperCase());
         setTeam1Players(t1);
         setTeam2Players(t2);
+        setAllPlayers(playersByTeams);
 
         const existingSquad = allUserSquads.find((s) => s.matchId === id);
         if (existingSquad) {
@@ -75,15 +90,23 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           setSelectedPlayers(selected);
           setMvpId(existingSquad.mvpId);
         }
+
+        const [squadsForMatch, visibility] = await Promise.all([getSquadsForMatch(id), getVisibilitySettings()]);
+        setOtherSquads(squadsForMatch.filter((s) => s.userId !== user?.uid));
+        const matchDay = matchData.date.slice(0, 10);
+        setVisibilityHiddenToday(!!visibility?.hideUntilToss && visibility.date === matchDay);
       }
       setLoading(false);
     };
     fetchData();
-  }, [id]);
+  }, [id, user?.uid]);
 
   const timeStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
   const isCompleted = timeStatus === 'completed';
   const isLocked = timeStatus !== 'open';
+  // Toss = the moment "locked" begins. Once locked, the toggle no longer
+  // matters — everyone can see everyone's trio for this match.
+  const othersHidden = visibilityHiddenToday && !isLocked;
 
   const selectPlayer = (player: Player) => {
     if (isLocked) return;
@@ -145,6 +168,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
         matchId: id,
         players: selectedPlayers.map((p) => p.id),
         mvpId: mvpId!,
+        matchTimestamp: match!.date,
       });
       toast.success('Trio locked in!');
       router.push('/dashboard');
@@ -315,6 +339,63 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
             </div>
           </aside>
         </div>
+
+        <section className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={14} className="text-muted" />
+            <h3 className="font-display font-black text-sm uppercase italic tracking-tight">Squad Room</h3>
+          </div>
+
+          {othersHidden ? (
+            <Card className="p-5 flex items-center gap-3 border-dashed">
+              <EyeOff size={16} className="text-muted shrink-0" />
+              <p className="text-xs text-muted leading-relaxed">
+                Other players&apos; trios are hidden until toss for this match. They&apos;ll appear here automatically once toss passes.
+              </p>
+            </Card>
+          ) : otherSquads.length === 0 ? (
+            <Card className="p-5 text-center border-dashed">
+              <p className="text-xs text-muted">No other trios submitted for this match yet.</p>
+            </Card>
+          ) : (
+            <div className="space-y-2.5 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-2.5 sm:space-y-0">
+              {otherSquads.map((squad) => (
+                <Card key={squad.userId} className="p-3.5">
+                  <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-border">
+                    <div className="w-6 h-6 rounded-full bg-primary-tint border border-primary/20 overflow-hidden shrink-0 flex items-center justify-center">
+                      {squad.userPhotoURL ? (
+                        <Image src={squad.userPhotoURL} alt="" width={24} height={24} className="w-full h-full object-cover" unoptimized />
+                      ) : (
+                        <span className="text-[9px] font-black text-primary">{(squad.userDisplayName || '?').charAt(0)}</span>
+                      )}
+                    </div>
+                    <span className="text-xs font-display font-black uppercase truncate">
+                      {squad.userDisplayName || 'Strategist'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {squad.players.map((pid) => {
+                      const player = allPlayers.find((p) => p.id === pid);
+                      const isMvp = squad.mvpId === pid;
+                      return (
+                        <span
+                          key={pid}
+                          className={cn(
+                            'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight',
+                            isMvp ? 'bg-accent-tint text-accent' : 'bg-surface-hover text-muted'
+                          )}
+                        >
+                          {isMvp && <Zap size={9} className="fill-current" />}
+                          {player ? player.name.split(' ').pop() : '...'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       <button
