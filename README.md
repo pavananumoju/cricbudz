@@ -103,7 +103,8 @@ ipl-fantasy-arena/
 │   │   └── ThemeContext.tsx          # Auto (system) + manual dark/light toggle
 │   │
 │   ├── lib/
-│   │   ├── firebase.ts               # Client SDK (reads, user-squad writes); connects to emulators in E2E
+│   │   ├── firebase.ts               # Client SDK (reads, user-squad writes); IndexedDB persistence in real
+│   │   │                             # browsers (off in E2E); connects to emulators in E2E
 │   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
 │   │   ├── adminAuth.ts              # requireAdmin()/requireAuth(): shared Bearer-token checks for API routes
 │   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
@@ -124,6 +125,7 @@ ipl-fantasy-arena/
 ├── scripts/
 │   ├── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
 │   ├── backfill-squad-fields.mjs     # One-time migration: backfills matchTimestamp/matchDay/user* on old userSquads
+│   ├── backfill-squad-playernames.mjs # One-time migration: backfills playerNames on old userSquads (see below)
 │   ├── backfill-seriesid.mjs         # One-time migration: normalizes matches.seriesId to string (dry-run by default)
 │   └── restore-firestore.mjs         # CLI-only Firestore restore from a backup JSON (dry-run by default,
 │                                      # requires --confirm to write) — deliberately not a UI button
@@ -298,6 +300,37 @@ token, verifies it via `getAdminAuth().verifyIdToken()`, and confirms the
 `admin` custom claim. One implementation to keep correct instead of four
 copies that could quietly drift apart.
 
+## Client-side Firestore cache (audit item #6)
+
+`src/lib/firebase.ts` initializes the client Firestore SDK with
+`persistentLocalCache` (IndexedDB-backed) in every real browser session —
+disabled when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (E2E), since each
+Playwright run seeds a fresh emulator dataset and a cache surviving between
+runs would make specs flaky in a way production never is.
+
+**What this does and doesn't do:** it makes reads durable offline (a
+`getDocs()` call falls back to the last-synced local snapshot instead of
+failing outright when the network drops) and is the prerequisite for any
+future move to `onSnapshot` listeners for genuinely instant warm-navigation
+repaints. It does **not**, on its own, reduce Firestore's billed doc-read
+count or skip the loading skeleton on a warm dashboard/fixtures/leaderboard
+revisit today — every read in `dataService.ts` is a one-shot `getDocs()`/
+`getDoc()` call, and the Firestore Web SDK's default (`source: 'default'`)
+behavior for those is server-first whenever the client is online, using the
+local cache only as an offline fallback. Actually skipping the skeleton on
+every revisit would mean deliberately serving `getDocsFromCache()` results
+first (accepting real staleness — e.g. a just-synced match or just-scored
+squad not showing up until a hard refresh) or switching to `onSnapshot`
+listeners kept alive across navigation. That's a larger, riskier change
+(especially for `getMatches()`/`getSquadsForMatch()`, where staleness would
+mean a real user seeing outdated fixtures or scores) that wasn't made in
+this pass — flagged here rather than implemented silently.
+
+There is no pull-to-refresh gesture in the app; the closest thing is a hard
+browser refresh (always re-reads from the server first) or, for fixture
+data specifically, the admin "Sync Fixtures" button on `/dashboard`, which
+reloads the page after syncing.
+
 ---
 
 # Firestore Collections
@@ -351,6 +384,7 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
   "userId": "uid",
   "matchId": "152240",
   "players": ["123", "456", "789"],
+  "playerNames": ["Player One", "Player Two", "Player Three"],
   "mvpId": "123",
   "createdAt": 1772400000000,
   "matchTimestamp": "2026-05-22T14:00:00.000Z",
@@ -361,11 +395,13 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
 }
 ```
 
-`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `totalPoints` is absent until an admin finalizes that match's scoring.
+`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `playerNames` (same order as `players`) is denormalized from the selected `Player` objects at save time (audit item #6) so the dashboard can show trio surnames without fetching the entire `players` collection (~250 docs) just to resolve 3-6 IDs. `totalPoints` is absent until an admin finalizes that match's scoring.
+
+`playerNames` is optional on the type (`playerNames?: string[]`) because squads saved before this field existed lack it — `scripts/backfill-squad-playernames.mjs` (dry-run via `--dry-run`, same pattern as `backfill-squad-fields.mjs`) backfills it by looking up each player ID once (cached across squads) and is safe to re-run (skips docs that already have a correctly-sized `playerNames`). The dashboard falls back to `"..."` for any squad still missing it. `firestore.rules`' `isValidSquadShape()` now also requires `playerNames` to be a 3-element list on every create/update, so every *new* write always carries it regardless of whether the backfill has run — the backfill only matters for displaying pre-existing squads correctly.
 
 **Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day — this is what `firestore.rules` enforces for single-document reads. Multi-document reads (the leaderboard, Squad Room) can't be proven safe by Firestore's rules engine for this rule and go through server-side API routes instead — see "Submission Visibility Toggle" above for why and how.
 
-**Write rules:** `firestore.rules` enforces the 30-minute pre-toss lock, squad shape, and the denormalized fields — not just the UI. On every create/update/delete: the write is rejected once `request.time` is past `matchTimestamp - 30min` (toss); on create/update, one extra read (`get()` on the linked `matches/{matchId}` doc) cross-checks that the submitted `matchTimestamp` exactly matches the match's real `date`, and that `matchDay` is a literal prefix of it — so a client can't spoof either field to fake a still-open lock window or dodge the visibility toggle. Shape is validated too: `players` must be a list of exactly 3, `mvpId` must be one of them, and the doc ID must equal `{userId}_{matchId}`. The dual-franchise check stays client/UI-only (`draftRules.ts`) since it needs player-team data the rules engine doesn't have — low-value to duplicate server-side. See `rules-tests/squadWrite.rules.test.ts` for the full enforced/rejected matrix.
+**Write rules:** `firestore.rules` enforces the 30-minute pre-toss lock, squad shape, and the denormalized fields — not just the UI. On every create/update/delete: the write is rejected once `request.time` is past `matchTimestamp - 30min` (toss); on create/update, one extra read (`get()` on the linked `matches/{matchId}` doc) cross-checks that the submitted `matchTimestamp` exactly matches the match's real `date`, and that `matchDay` is a literal prefix of it — so a client can't spoof either field to fake a still-open lock window or dodge the visibility toggle. Shape is validated too: `players` and `playerNames` must each be a list of exactly 3, `mvpId` must be one of `players`, and the doc ID must equal `{userId}_{matchId}`. The dual-franchise check stays client/UI-only (`draftRules.ts`) since it needs player-team data the rules engine doesn't have — low-value to duplicate server-side. See `rules-tests/squadWrite.rules.test.ts` for the full enforced/rejected matrix.
 
 ## `settings/visibility`
 

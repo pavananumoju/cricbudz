@@ -52,6 +52,8 @@ service cloud.firestore {
     function isValidSquadShape(squadId, data) {
       return data.players is list &&
         data.players.size() == 3 &&
+        data.playerNames is list &&
+        data.playerNames.size() == 3 &&
         data.mvpId in data.players &&
         squadId == data.userId + '_' + data.matchId;
     }

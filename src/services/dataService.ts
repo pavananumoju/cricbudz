@@ -67,14 +67,6 @@ export async function getMatchById(
   return undefined;
 }
 
-export async function getPlayers(): Promise<Player[]> {
-  const snap = await getDocs(collection(db, 'players'));
-  return snap.docs.map(d => ({
-    id: d.id,
-    ...d.data()
-  } as Player));
-}
-
 export async function getPlayersByTeams(
   team1: string,
   team2: string

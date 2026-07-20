@@ -58,6 +58,12 @@ export interface UserSquad {
   // SDK has no way to look up another user's profile by uid otherwise.
   userDisplayName: string | null;
   userPhotoURL: string | null;
+  // Denormalized from the selected Player objects at save time (same order
+  // as `players`) so the dashboard can show trio surnames without fetching
+  // the entire players collection. Optional because squads saved before
+  // this field existed lack it until scripts/backfill-squad-playernames.mjs
+  // has run.
+  playerNames?: string[];
 }
 
 export interface LeaderboardEntry {

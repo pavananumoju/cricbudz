@@ -16,8 +16,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
-import { getUserSquads, getMatches, getPlayers, deleteUserSquad } from '@/services/dataService';
-import { UserSquad, Match, Player } from '@/types';
+import { getUserSquads, getMatches, deleteUserSquad } from '@/services/dataService';
+import { UserSquad, Match } from '@/types';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
@@ -32,7 +32,6 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [squads, setSquads] = useState<(UserSquad & { match?: Match })[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [retryToken, setRetryToken] = useState(0);
@@ -93,13 +92,11 @@ export default function Dashboard() {
 
       setError(null);
       try {
-        const [userSquads, fetchedMatches, allPlayers] = await Promise.all([
+        const [userSquads, fetchedMatches] = await Promise.all([
           getUserSquads(),
           getMatches(),
-          getPlayers(),
         ]);
 
-        setPlayers(allPlayers);
         setAllMatches(fetchedMatches);
 
         const enrichedSquads = userSquads
@@ -321,12 +318,12 @@ export default function Dashboard() {
                     {data.squad ? (
                       <div className="flex flex-wrap gap-1.5 mb-4">
                         {data.squad.players.map((pId, pIdx) => {
-                          const player = players.find((p) => p.id === pId);
+                          const playerName = data.squad!.playerNames?.[pIdx];
                           const isMvp = data.squad!.mvpId === pId;
                           return (
                             <Badge key={pIdx} variant={isMvp ? 'mvp' : 'neutral'}>
                               {isMvp && <Zap size={9} className="fill-current" />}
-                              {player ? player.name.split(' ').pop() : '...'}
+                              {playerName ? playerName.split(' ').pop() : '...'}
                             </Badge>
                           );
                         })}

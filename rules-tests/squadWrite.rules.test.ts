@@ -63,6 +63,7 @@ function honestSquad(overrides: Partial<Record<string, unknown>> = {}) {
     userId: 'userA',
     matchId: MATCH_ID,
     players: ['p1', 'p2', 'p3'],
+    playerNames: ['Player One', 'Player Two', 'Player Three'],
     mvpId: 'p1',
     matchTimestamp: matchStart,
     matchDay: matchStart.slice(0, 10),
@@ -251,6 +252,27 @@ describe('shape validation: exactly 3 players, MVP among them, doc ID matches us
       setDoc(
         doc(modular(userA), 'userSquads', `userA_${MATCH_ID}`),
         honestSquad({ mvpId: 'p99', matchTimestamp: matchStart, matchDay: matchStart.slice(0, 10) })
+      )
+    );
+  });
+
+  it('denies a squad missing playerNames', async () => {
+    const userA = testEnv.authenticatedContext('userA');
+    const data = honestSquad({ matchTimestamp: matchStart, matchDay: matchStart.slice(0, 10) });
+    delete (data as Record<string, unknown>).playerNames;
+    await assertFails(setDoc(doc(modular(userA), 'userSquads', `userA_${MATCH_ID}`), data));
+  });
+
+  it('denies a playerNames list whose size disagrees with players', async () => {
+    const userA = testEnv.authenticatedContext('userA');
+    await assertFails(
+      setDoc(
+        doc(modular(userA), 'userSquads', `userA_${MATCH_ID}`),
+        honestSquad({
+          playerNames: ['Player One', 'Player Two'],
+          matchTimestamp: matchStart,
+          matchDay: matchStart.slice(0, 10),
+        })
       )
     );
   });

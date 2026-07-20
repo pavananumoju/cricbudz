@@ -14,7 +14,7 @@ import {
   getSquadsForMatch,
   getVisibilitySettings,
 } from '@/services/dataService';
-import { Player, Match, UserSquad } from '@/types';
+import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
 import { cn, getMatchTimeStatus } from '@/lib/utils';
 import { SQUAD_TARGET_SIZE, checkDualFranchiseViolation, validateSquad } from '@/lib/draftRules';
 import { useDev } from '@/context/DevContext';
@@ -81,7 +81,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [squadRoomError, setSquadRoomError] = useState<unknown>(null);
   const [squadRoomRetryToken, setSquadRoomRetryToken] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [visibilityHiddenToday, setVisibilityHiddenToday] = useState(false);
+  const [visibilitySettings, setVisibilitySettings] = useState<VisibilitySettings | null>(null);
   const [motmSelection, setMotmSelection] = useState('');
   const [finalizing, setFinalizing] = useState(false);
   const [forceFinalize, setForceFinalize] = useState(false);
@@ -131,10 +131,13 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     };
   }, [id, pageRetryToken]);
 
-  // Squad Room is fetched separately from the main match/players data above
-  // so a failure here (or a retry) doesn't block the rest of the draft page.
+  // Squad Room's fetch needs only the match ID (not the loaded match doc or
+  // its rosters), and its own loading/error state stays independent of the
+  // primary fetch (item #5) — so it kicks off as soon as `id` is known,
+  // running in parallel with the match/rosters fetch above instead of
+  // waiting for it.
   useEffect(() => {
-    if (!id || !match) return;
+    if (!id) return;
     let cancelled = false;
     setSquadRoomLoading(true);
     setSquadRoomError(null);
@@ -142,8 +145,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       .then(([squadsForMatch, visibility]) => {
         if (cancelled) return;
         setOtherSquads(squadsForMatch.filter((s) => s.userId !== user?.uid));
-        const matchDay = match.date.slice(0, 10);
-        setVisibilityHiddenToday(!!visibility?.hideUntilToss && visibility.date === matchDay);
+        setVisibilitySettings(visibility);
       })
       .catch((err) => {
         if (!cancelled) setSquadRoomError(err);
@@ -154,14 +156,16 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     return () => {
       cancelled = true;
     };
-  }, [id, match, user?.uid, squadRoomRetryToken]);
+  }, [id, user?.uid, squadRoomRetryToken]);
 
   const timeStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
   const isCompleted = timeStatus === 'completed';
   const isLocked = timeStatus !== 'open';
   // Toss = the moment "locked" begins. Once locked, the toggle no longer
   // matters — everyone can see everyone's trio for this match.
-  const othersHidden = visibilityHiddenToday && !isLocked;
+  const visibilityHiddenToday =
+    !!visibilitySettings?.hideUntilToss && match && visibilitySettings.date === match.date.slice(0, 10);
+  const othersHidden = !!visibilityHiddenToday && !isLocked;
 
   const selectPlayer = (player: Player) => {
     if (isLocked) return;
@@ -205,6 +209,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       await saveUserSquad({
         matchId: id,
         players: selectedPlayers.map((p) => p.id),
+        playerNames: selectedPlayers.map((p) => p.name),
         mvpId: mvpId!,
         matchTimestamp: match!.date,
       });
