@@ -122,6 +122,8 @@ Root cause A also turned out to be more specific than described: pinning `matchD
 
 **Revisit if:** audit item #2 (locking squad edits after toss server-side) gets picked up — `GET /api/matches/[matchId]/squads` is a natural place to also enforce a matching write-side check, since it already computes "has toss passed" for that match server-side.
 
+**Prod-verified 2026-07-20:** this fix (and item #2 below) sat committed-but-unpushed on `feature/fantasy-team-rules` for a day, meaning `main`/Vercel production was still running the old code that made these two routes 404. Pushed to `main` and deployed via `vercel --prod`, then hit the real production endpoints (`https://ipl-fantasy-arena.vercel.app`) with a real ID token minted for a real user via a throwaway Node script (not the emulator): `GET /api/leaderboard` and `GET /api/matches/[matchId]/squads` both returned real, non-empty squad data. Script deleted after the run — see the squad-writes entry below for the same script's other checks.
+
 ## Squad writes locked server-side via firestore.rules (2026-07-20)
 
 Audit item #2: `firestore.rules` only ever checked ownership on `userSquads` writes — no time check, no shape check, no validation of the client-supplied denormalized `matchTimestamp`/`matchDay`. A browser-console user could edit their trio after toss (or after the match), submit a malformed squad, or spoof `matchTimestamp`/`matchDay` to dodge the visibility toggle. Confirmed all four holes empirically first (`rules-tests/squadWrite.rules.test.ts`, written against the *unmodified* rules and initially asserting they were accepted) before changing anything.
@@ -132,7 +134,18 @@ Audit item #2: `firestore.rules` only ever checked ownership on `userSquads` wri
 * **Source-of-truth cross-check** — one extra `get()` on the linked `matches/{matchId}` doc per create/update verifies `request.resource.data.matchTimestamp == match.date` exactly, and that `matchDay` is a literal prefix of it (rules has no substring/slice operator, so this is done via a `matches()` regex anchor: `matchTimestamp.matches(matchDay + 'T.*')`). This closes the spoofing hole for both fields in one check, since the visibility toggle's `matchDay` gate and `hasTossPassed`'s `matchTimestamp` are now pinned to real match data.
 * **Shape validation** — `players` must be a list of exactly 3, `mvpId` must be one of them, and the doc ID must equal `{userId}_{matchId}` (mirrors `draftRules.ts`). The dual-franchise check stays client-only — needs player-team data the rules engine doesn't have, and isn't meaningfully exploitable on its own.
 
-`/api/finalize-match` (Admin SDK) bypasses rules entirely and is unaffected. No client-side messages, UX, or `dataService.ts` changed — this is a pure backstop; the honest pre-lock create/edit/delete flow is byte-for-byte the same request shape as before, just now also accepted by rules instead of merely trusted. Full enforced/rejected matrix: `rules-tests/squadWrite.rules.test.ts` (21/21 rules tests, 69/69 unit tests, 8/8 E2E all green after the change). `firestore.rules` was edited but **not deployed** as part of this change — deploy manually with `firebase deploy --only firestore:rules` after review.
+`/api/finalize-match` (Admin SDK) bypasses rules entirely and is unaffected. No client-side messages, UX, or `dataService.ts` changed — this is a pure backstop; the honest pre-lock create/edit/delete flow is byte-for-byte the same request shape as before, just now also accepted by rules instead of merely trusted. Full enforced/rejected matrix: `rules-tests/squadWrite.rules.test.ts` (21/21 rules tests, 69/69 unit tests, 8/8 E2E all green after the change).
+
+**Deployed and prod-verified 2026-07-20.** Emulator tests are necessarily a simulation — `timestamp.value()`'s ISO-string-parsing behavior isn't documented by Firebase (official docs only cover epoch millis), and emulator/production timestamp-handling mismatches have a history of filed GitHub issues — so emulator-green wasn't treated as proof production behaves the same way. Before deploying: re-ran `npm run test:rules` (21/21 still green), then fetched the *actual live* ruleset from the Firebase Rules API (not git history) for the app's real named database and diffed it against local `firestore.rules` to confirm exactly what was about to change. Deployed via `firebase deploy --only firestore:rules`, then re-fetched the live ruleset and confirmed it was now byte-identical to local.
+
+Then ran a throwaway Node script (`scripts/verify-prod-rules.mjs`, deleted after use) against **real production Firestore** — signed in as a real user via a freshly minted custom token (no password ever handled), and, since the 2026 IPL season had already ended and prod had zero future matches, created one throwaway `matches` doc via the Admin SDK (bypasses rules; only used as fixture data, not to test anything) to serve as an "open, pre-toss" match:
+
+* Write to a real **finished** match → `permission-denied` ✅
+* Write to the throwaway **open** match → succeeded ✅ (proves the rule isn't just denying everything)
+* Write with a **spoofed `matchTimestamp`** (mismatched vs. the real match doc) → `permission-denied` ✅
+* Write with **4 players** instead of 3 → `permission-denied` ✅
+
+All test writes were reverted (squad doc restored to its prior state, throwaway match doc deleted) and confirmed via a separate Admin SDK read after cleanup. Full matrix in the script's run output; script itself was throwaway and is no longer in the repo.
 
 ## AI recommendations: removed
 
