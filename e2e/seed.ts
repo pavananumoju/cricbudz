@@ -10,6 +10,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { writeFileSync } from 'fs';
+import { CRICKET_CONFIG } from '../src/config/cricket';
 import {
   PROJECT_ID,
   DATABASE_ID,
@@ -47,6 +48,7 @@ export async function runSeed() {
 
   await db.collection('matches').doc(TEST_MATCH_ID).set({
     id: TEST_MATCH_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
     team1: 'SRH',
     team2: 'RCB',
     date: openMatchDate,
@@ -56,6 +58,7 @@ export async function runSeed() {
   });
   await db.collection('matches').doc(TEST_MATCH_LOCKED_ID).set({
     id: TEST_MATCH_LOCKED_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
     team1: 'SRH',
     team2: 'RCB',
     date: lockedMatchDate,
@@ -65,6 +68,7 @@ export async function runSeed() {
   });
   await db.collection('matches').doc(TEST_MATCH_VISIBILITY_ID).set({
     id: TEST_MATCH_VISIBILITY_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
     team1: 'SRH',
     team2: 'RCB',
     date: openMatchDate,
@@ -75,6 +79,7 @@ export async function runSeed() {
   const pastMatchDate = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days ago
   await db.collection('matches').doc(TEST_MATCH_PAST_ID).set({
     id: TEST_MATCH_PAST_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
     team1: 'SRH',
     team2: 'RCB',
     date: pastMatchDate,
@@ -86,6 +91,7 @@ export async function runSeed() {
   const scoredMatchDate = new Date(now - 5 * 60 * 60 * 1000).toISOString(); // 5h ago — completed
   await db.collection('matches').doc(TEST_MATCH_SCORED_ID).set({
     id: TEST_MATCH_SCORED_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
     team1: 'SRH',
     team2: 'RCB',
     date: scoredMatchDate,

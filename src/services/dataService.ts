@@ -13,13 +13,20 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
+import { CRICKET_CONFIG } from '@/config/cricket';
 
 // The season's first synced match's date — used to number leaderboard
 // weeks ("Week 1", "Week 2", ...) relative to when the season actually
-// started, rather than an arbitrary ISO calendar week number.
+// started, rather than an arbitrary ISO calendar week number. Scoped to
+// the current series so a past season's matches don't push "Week 1" back.
 export async function getEarliestMatchDate(): Promise<string | null> {
   try {
-    const q = query(collection(db, 'matches'), orderBy('date', 'asc'), limit(1));
+    const q = query(
+      collection(db, 'matches'),
+      where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
+      orderBy('date', 'asc'),
+      limit(1)
+    );
     const snap = await getDocs(q);
     if (snap.empty) return null;
     return (snap.docs[0].data() as Match).date;
@@ -29,10 +36,14 @@ export async function getEarliestMatchDate(): Promise<string | null> {
   }
 }
 
+// Scoped to the current series (CRICKET_CONFIG.IPL_SERIES_ID) so fixtures
+// from a past season synced earlier don't leak into the current one's
+// match list/leaderboard week count.
 export async function getMatches(): Promise<Match[]> {
   try {
     const q = query(
       collection(db, 'matches'),
+      where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
       orderBy('date', 'asc')
     );
 

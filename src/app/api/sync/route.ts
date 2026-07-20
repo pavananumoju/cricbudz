@@ -74,7 +74,10 @@ export async function GET(req: Request) {
 
       matches.push({
         id: matchIdStr,
-        seriesId: info.seriesId,
+        // Cricbuzz returns seriesId as a number; CRICKET_CONFIG.IPL_SERIES_ID
+        // is a string, and season-scoped queries filter on equality against
+        // it — coerce to string here so newly-synced matches match that type.
+        seriesId: info.seriesId != null ? String(info.seriesId) : info.seriesId,
         team1Id: info.team1?.teamId,
         team1LogoId: info.team1?.imageId,
         team2Id: info.team2?.teamId,

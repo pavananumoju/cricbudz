@@ -135,19 +135,31 @@ caused it.
 ## 2. Season Rollover Checklist (do this once, right before a new IPL
    season starts)
 
-1. Open `src/config/cricket.ts` and update `IPL_SERIES_ID` and
+1. **Take a backup first.** Sign in as admin, go to `/admin`, and click
+   **"Download Backup"** (see Section 3 below). Do this *before* touching
+   `IPL_SERIES_ID` — it's your safety copy of the just-finished season's
+   data in case anything goes wrong during rollover.
+2. Open `src/config/cricket.ts` and update `IPL_SERIES_ID` and
    `IPL_SEASON` to the new season's values. (An AI assistant can look
    these up if you tell it the current IPL season's Cricbuzz series ID —
    you may need to find that ID via RapidAPI's Cricbuzz endpoint
    documentation or by browsing Cricbuzz's site for the series URL, since
    it's not something the app can guess on its own.)
-2. Run the **Regular Health Check** above, start to finish.
-3. Deploy (see Section 4 below).
-4. Sign in as admin and click **Sync Fixtures** on the dashboard once the
+3. Run the **Regular Health Check** above, start to finish.
+4. Deploy (see Section 4 below).
+5. Sign in as admin and click **Sync Fixtures** on the dashboard once the
    new season's matches are listed on Cricbuzz — this pulls the new
    fixtures and player rosters into the app.
-5. Spot check: open a couple of matches and confirm both teams' players
+6. Spot check: open a couple of matches and confirm both teams' players
    show up correctly with real names (not blank/garbled).
+7. **Verify the leaderboard reads "Week 1".** Go to `/leaderboard` — the
+   header should say "Week 1", not some larger number. Matches and
+   leaderboard weeks are scoped to the current `IPL_SERIES_ID`, so old
+   seasons' fixtures never leak into the new one's match list or week
+   count; if it says anything other than "Week 1" right after the first
+   sync, something's wrong with the rollover — hand this to an AI
+   assistant with "the leaderboard didn't reset to Week 1 after season
+   rollover."
 
 ---
 

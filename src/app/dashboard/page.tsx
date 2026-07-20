@@ -172,7 +172,6 @@ export default function Dashboard() {
   const todaysMatches = allMatches
     .filter((m) => {
       if (!m.date) return false;
-      if (['1', '2', '3'].includes(m.id)) return false;
       const matchDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(m.date));
       return matchDateStr === effectiveDateStr;
     })

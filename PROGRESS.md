@@ -161,6 +161,22 @@ No behavior change for the honest path: a match with `ismatchcomplete: true` and
 
 **Not deployed as part of this pass** — `firestore.rules` changed (new `auditLog` match block) and needs `firebase deploy --only firestore:rules`; app code needs `vercel --prod`. See items #1/#2 above for why "committed" and "deployed" aren't the same thing on this project — don't assume this shipped just because it's committed to `main`.
 
+## Matches season-scoped, seriesId normalized, test-seed docs removed (2026-07-20)
+
+Audit item #4: `getMatches()` and `getEarliestMatchDate()` (`src/services/dataService.ts`) queried the `matches` collection with no `seriesId` filter, so once a second IPL season is synced, `/matches`, the dashboard, and the leaderboard's "Week N" count would all silently include the previous season's fixtures too — inflating the week number and mixing old fixtures into the current list. Only one season (`seriesId 9241`) exists in prod today, so this wasn't yet an active bug, but it would have broken silently at the next season rollover.
+
+**Fix:** `getMatches()` and `getEarliestMatchDate()` now filter `where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID)`. `getWeekNumber()` itself (`src/lib/leaderboard.ts`) needed no change — it already just takes a `seasonStart` date; it now receives an already-scoped one.
+
+**seriesId type mismatch:** Cricbuzz's API returns `seriesId` as a number, but `CRICKET_CONFIG.IPL_SERIES_ID` is a string (and stays a string — it's used as a display/config value elsewhere too), so an unscoped `==` filter would never have matched. `/api/sync` now coerces it via `String()` at write time. Existing prod matches (74 docs, all `seriesId: 9241` as a number, confirmed via a direct prod Firestore read before changing anything) were backfilled to the string form via `scripts/backfill-seriesid.mjs` (dry-run by default, same pattern as `scripts/backfill-squad-fields.mjs`) rather than permanently supporting both types in scoped queries — a one-time migration was judged cleaner than an indefinite dual-type filter.
+
+**Composite index:** the `seriesId` equality + `date` orderBy combination needs a Firestore composite index (equality-then-range/orderBy on different fields isn't covered by Firestore's automatic single-field indexes). Added to `firestore.indexes.json` (new file, referenced from `firebase.json`) — not deployed as part of this pass, same "committed ≠ deployed" split as prior items; needs `firebase deploy --only firestore:indexes`.
+
+**Leftover test-seed docs:** `matches/1`, `matches/2`, `matches/3` — hard-coded ID filters existed in `src/app/matches/page.tsx` and `src/app/dashboard/page.tsx` working around them. A direct prod Firestore read (before touching anything, per the audit's own instruction not to delete without confirming first) found these three docs **don't currently exist** in prod — nothing to delete. The now-dead hard-coded filters were removed from both pages regardless, since they referenced IDs no longer present.
+
+**userSquads deliberately unchanged** — no `seriesId` field added. Week-browsing is date-driven (`matchDay`) and already excludes old seasons naturally; adding a redundant field here would be gold-plating per the audit's own conclusion.
+
+`e2e/seed.ts`'s seeded matches previously had no `seriesId` at all, which would have made them invisible to the now-scoped `getMatches()`/`getEarliestMatchDate()` and broken most of the E2E suite — added `seriesId: CRICKET_CONFIG.IPL_SERIES_ID` to every seeded match doc. New unit test (`src/services/dataService.test.ts`) simulates a two-season dataset against a minimal in-memory fake of the `firebase/firestore` query surface and confirms both functions correctly exclude the old season and that `getWeekNumber()` comes out as "Week 1"/"Week 2" for the new season, not inflated by the old one.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

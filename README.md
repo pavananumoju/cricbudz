@@ -123,6 +123,8 @@ ipl-fantasy-arena/
 │
 ├── scripts/
 │   ├── set-admin-claim.mjs           # One-time script to grant a user the `admin` custom claim
+│   ├── backfill-squad-fields.mjs     # One-time migration: backfills matchTimestamp/matchDay/user* on old userSquads
+│   ├── backfill-seriesid.mjs         # One-time migration: normalizes matches.seriesId to string (dry-run by default)
 │   └── restore-firestore.mjs         # CLI-only Firestore restore from a backup JSON (dry-run by default,
 │                                      # requires --confirm to write) — deliberately not a UI button
 │
@@ -138,6 +140,7 @@ ipl-fantasy-arena/
 ├── vitest.rules.config.ts            # Separate Node-environment config for rules-tests/
 ├── playwright.config.ts              # E2E test config (webServer + globalSetup seeding)
 ├── firestore.rules                   # Deployed via `firebase deploy --only firestore:rules`
+├── firestore.indexes.json            # Deployed via `firebase deploy --only firestore:indexes`
 ├── firebase.json / .firebaserc       # Firebase CLI project/rules/emulator config
 ├── public/
 │   ├── manifest.json                 # PWA manifest
@@ -229,7 +232,7 @@ A minimal `auditLog` Firestore collection (Admin SDK-write-only, admin-read-only
 ## Weekly Leaderboard (`/leaderboard`)
 
 * Weeks run **Monday–Sunday** (`src/lib/leaderboard.ts`). Standings are **computed live** on every page load by querying all scored squads (`totalPoints` set) whose `matchDay` falls in the selected week and summing per user — there's no separate "leaderboard" collection or scheduled rollup job to keep in sync.
-* Header reads **"Week N"** (e.g. "Week 8"), numbered from the season's actual first synced match (`getEarliestMatchDate()` + `getWeekNumber()`) — not an arbitrary ISO calendar week number, which wouldn't mean anything to a user. Falls back to just showing the date range if no matches are synced yet.
+* Header reads **"Week N"** (e.g. "Week 8"), numbered from the season's actual first synced match (`getEarliestMatchDate()` + `getWeekNumber()`) — not an arbitrary ISO calendar week number, which wouldn't mean anything to a user. Falls back to just showing the date range if no matches are synced yet. Both `getEarliestMatchDate()` and the fixture list's `getMatches()` are scoped to `CRICKET_CONFIG.IPL_SERIES_ID`, so a prior season's matches (left in Firestore after rollover, never deleted) don't inflate the week count or show up in `/matches`.
 * A flat ranked list — `1. Name … points`, `2. Name … points`, etc. — not a separate podium widget. Top 3 get gold/silver/bronze rank badges (#1 gets a crown icon), everyone else gets a plain numbered badge.
 * Week navigation (prev/next) lets you browse any past week's final standings; "next week" is disabled once you're viewing the current week.
 * Once a week has fully ended, rank #1 is labeled "Winner" and #2/#3 "Runner-up"; for the current, still-in-progress week each row instead shows how many matches that user has had scored so far, since the week isn't decided yet.
@@ -306,7 +309,7 @@ Synced by `/api/sync` (Admin SDK only — Firestore rules deny client writes).
 ```json
 {
   "id": "152240",
-  "seriesId": 9241,
+  "seriesId": "9241",
   "team1Id": 255,
   "team1": "SRH",
   "team2Id": 59,
@@ -332,6 +335,8 @@ Synced by `/api/sync` (Admin SDK only — Firestore rules deny client writes).
 `scoring` is only present once an admin has finalized the match (see Scoring Engine above); `playerPoints` covers every player who had any tracked stat, not just the ones drafted.
 
 Note: `status` here is whatever Cricbuzz reported *at sync time* — it does not update live. The app's own `open`/`locked`/`completed` UI state (`getMatchTimeStatus()` in `src/lib/utils.ts`) is computed client-side from `date` vs. the current time instead, since there's no live re-sync.
+
+`seriesId` is written as a **string** at sync time (`/api/sync` coerces Cricbuzz's raw numeric `seriesId` via `String()`), to match `CRICKET_CONFIG.IPL_SERIES_ID`'s type — `getMatches()` and `getEarliestMatchDate()` (`src/services/dataService.ts`) both filter `where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID)` so a prior season's fixtures (still sitting in Firestore after rollover) never leak into the current season's match list or leaderboard week count. Matches synced before this filter existed had a numeric `seriesId`; they were backfilled once via `scripts/backfill-seriesid.mjs` (same dry-run-by-default pattern as `scripts/backfill-squad-fields.mjs`) — a season-rollover sync only ever writes the string form going forward, so this shouldn't need re-running. `userSquads` deliberately does **not** carry a `seriesId` field — week-browsing is already date-driven (`matchDay`) and naturally excludes old seasons without one.
 
 ## `players`
 
@@ -455,11 +460,12 @@ npm run test:rules   # boots the Firestore emulator for the duration of the run,
 ## Deploying
 
 ```bash
-vercel --prod                              # deploy app to production
-firebase deploy --only firestore:rules     # deploy Firestore security rules
+vercel --prod                                # deploy app to production
+firebase deploy --only firestore:rules       # deploy Firestore security rules
+firebase deploy --only firestore:indexes     # deploy Firestore composite indexes
 ```
 
-Both require being logged in (`vercel login`, `firebase login`) — see each CLI's own auth flow.
+Both require being logged in (`vercel login`, `firebase login`) — see each CLI's own auth flow. Composite indexes (`firestore.indexes.json`) are needed for queries that combine an equality filter with an `orderBy` on a different field — e.g. `getMatches()`'s `seriesId` + `date` query — since Firestore can't serve those from its automatic single-field indexes alone.
 
 ---
 

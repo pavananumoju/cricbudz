@@ -43,8 +43,7 @@ export default function MatchesPage() {
   useEffect(() => {
     const fetchMatches = async () => {
       const data = await getMatches();
-      const hasRealMatches = data.some((m) => !['1', '2', '3'].includes(m.id));
-      setMatches(hasRealMatches ? data.filter((m) => !['1', '2', '3'].includes(m.id)) : data);
+      setMatches(data);
       setLoading(false);
     };
     fetchMatches();
