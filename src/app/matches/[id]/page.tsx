@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap, Award } from 'lucide-react';
+import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap, Award, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { auth } from '@/lib/firebase';
@@ -40,6 +40,16 @@ const TEAM_BRANDS: Record<string, { imageId: string; textClass: string; bgClass:
   GT: { imageId: 'gt', textClass: 'text-slate-600 dark:text-slate-300', bgClass: 'bg-slate-500/10', borderClass: 'border-slate-500/30', accentColor: '#1b2133' },
 };
 
+type UnmatchedReport = { batsmen: string[]; bowlers: string[]; fielders: string[] };
+
+function formatUnmatchedWarning(unmatched: UnmatchedReport): string {
+  const names = Array.from(new Set([...unmatched.batsmen, ...unmatched.bowlers, ...unmatched.fielders]));
+  if (names.length === 0) return '';
+  const preview = names.slice(0, 3).map((n) => `"${n}"`).join(', ');
+  const more = names.length > 3 ? ` (+${names.length - 3} more)` : '';
+  return `${preview}${more} in the scorecard didn't match any synced player — check before trusting these scores.`;
+}
+
 function getTeamBrand(teamShortName: string) {
   return TEAM_BRANDS[teamShortName.toUpperCase()] || {
     imageId: '152655',
@@ -67,6 +77,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [visibilityHiddenToday, setVisibilityHiddenToday] = useState(false);
   const [motmSelection, setMotmSelection] = useState('');
   const [finalizing, setFinalizing] = useState(false);
+  const [forceFinalize, setForceFinalize] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -179,14 +190,17 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ matchId: id, motmPlayerId: motmSelection || null }),
+        body: JSON.stringify({ matchId: id, motmPlayerId: motmSelection || null, force: forceFinalize }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         toast.success(`Scored ${data.squadsUpdated} trio(s) for this match.`, { id: toastId });
+        const warningText: string = data.unmatched ? formatUnmatchedWarning(data.unmatched) : '';
+        if (warningText) toast.warning(warningText, { duration: 10000 });
         const [refreshedMatch, refreshedSquads] = await Promise.all([getMatchById(id), getSquadsForMatch(id)]);
         if (refreshedMatch) setMatch(refreshedMatch);
         setOtherSquads(refreshedSquads.filter((s) => s.userId !== user?.uid));
+        setForceFinalize(false);
       } else {
         toast.error(data.error || 'Failed to finalize scoring.', { id: toastId });
       }
@@ -372,6 +386,14 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                   Last finalized {new Date(match.scoring.finalizedAt).toLocaleString()}.
                 </p>
               )}
+              {match.scoring?.warnings && (
+                <div className="mb-3 p-3 rounded-xl bg-warning-tint border border-warning/20 flex gap-2">
+                  <AlertTriangle size={14} className="text-warning shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-muted leading-relaxed">
+                    {formatUnmatchedWarning(match.scoring.warnings)}
+                  </p>
+                </div>
+              )}
               <label htmlFor="motm-select" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
                 Man of the Match (optional)
               </label>
@@ -393,9 +415,21 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                   {finalizing ? 'Scoring...' : match.scoring ? 'Re-finalize' : 'Finalize'}
                 </Button>
               </div>
+              <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceFinalize}
+                  onChange={(e) => setForceFinalize(e.target.checked)}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className="text-[10px] text-warning leading-relaxed">
+                  Force finalize even though Cricbuzz hasn&apos;t confirmed the match is complete — only for an
+                  abandoned or rain-shortened match Cricbuzz will never flag as complete.
+                </span>
+              </label>
               <p className="text-[10px] text-muted leading-relaxed mt-3">
                 Fetches the real scorecard from Cricbuzz and scores every submitted trio for this match. Only
-                works once Cricbuzz itself reports the match as complete.
+                works once Cricbuzz itself reports the match as complete, unless force is checked above.
               </p>
             </Card>
           </section>

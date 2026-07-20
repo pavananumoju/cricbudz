@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-import { getAdminAuth } from '@/lib/firebase-admin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { requireAdmin } from '@/lib/adminAuth';
 
 export async function GET(req: Request) {
@@ -49,6 +49,13 @@ export async function POST(req: Request) {
   }
 
   await getAdminAuth().setCustomUserClaims(uid, { admin: isAdmin });
+
+  await getAdminDb().collection('auditLog').add({
+    action: isAdmin ? 'grant_admin' : 'revoke_admin',
+    actorUid: authResult.uid,
+    targetUid: uid,
+    at: new Date().toISOString(),
+  });
 
   return NextResponse.json({ success: true, uid, isAdmin });
 }

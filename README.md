@@ -132,7 +132,8 @@ ipl-fantasy-arena/
 │   └── *.spec.ts
 ├── rules-tests/                       # firestore.rules tests (Vitest + @firebase/rules-unit-testing)
 │   ├── visibility.rules.test.ts      # Proves which multi-document queries the rules engine can/can't allow
-│   └── squadWrite.rules.test.ts      # Proves the lock window / shape / source-of-truth checks on userSquads writes
+│   ├── squadWrite.rules.test.ts      # Proves the lock window / shape / source-of-truth checks on userSquads writes
+│   └── auditLog.rules.test.ts        # Proves auditLog is admin-read-only with no client write path
 ├── vitest.config.ts                  # Unit/component test config (jsdom + RTL)
 ├── vitest.rules.config.ts            # Separate Node-environment config for rules-tests/
 ├── playwright.config.ts              # E2E test config (webServer + globalSetup seeding)
@@ -210,8 +211,20 @@ Once a match is actually complete (per Cricbuzz, not just past its assumed durat
 * Man of the Match is entered manually by the admin in a dropdown when finalizing (not exposed by any Cricbuzz endpoint found so far) and awards its bonus on top of whatever else that player earned.
 * **"Direct Hit" is folded into the regular Runout score** — Cricbuzz's data has no field distinguishing a direct-hit run-out from an assisted one, so they're scored identically.
 * Fielding credit (catches/run-outs/stumpings) comes from regex-parsing the batsman's free-text dismissal string (e.g. `"c Phil Salt b Jacob Duffy"`), matched against the two playing squads' names. **This is best-effort, not guaranteed-correct**: a real captured example showed Cricbuzz's own data being internally inconsistent — a player's own batting row said "Philip Salt" while the same match's dismissal text called him "Phil Salt". A same-surname fallback (only used when unambiguous within the two squads) recovers this specific case; see `src/lib/scoring.test.ts` for the exact real-world example.
-* **The "Dot Ball" scoring rule may never actually fire** — every bowler in a real completed match checked during development returned `dots: 0`, suggesting this field either isn't populated by this API tier or isn't reliable. The code still handles it correctly if the API ever does return real values.
+* **Unmatched names no longer fail silently.** Any batsman/bowler/fielder name `parseScorecard()` can't resolve to a synced player — beyond what the surname fallback above recovers — is collected into an `unmatched: { batsmen, bowlers, fielders }` report instead of being dropped. `POST /api/finalize-match` returns it in the response and stores it as `scoring.warnings` on the match doc (`null` once checked with nothing unmatched); the admin "Finalize" card on the draft page shows a persistent warning banner naming the unmatched names whenever `scoring.warnings` is set, plus a one-off toast right after finalizing. This can't auto-fix a scoring gap — the admin has to notice it and, if it matters, fix the roster/sync data and re-finalize — but it replaces a silent wrong score with a visible one.
+* **The "Dot Ball" scoring rule may never actually fire** — every bowler in a real completed match checked during development returned `dots: 0`, suggesting this field either isn't populated by this API tier or isn't reliable. The code still handles it correctly if the API ever does return real values. The `/rules` page footnotes this (`DOT_BALL_FOOTNOTE` in `scoringRules.ts`) rather than removing the line — the rule is real, the input data just rarely shows up.
+* **Finalizing now requires Cricbuzz's `ismatchcomplete` to be explicitly `true`**, not just not-`false` — a missing/undefined flag used to pass through and let a half-played match get scored. `POST /api/finalize-match` accepts a `force: true` body flag to override this for the rare legitimate case (an abandoned/rain-shortened match Cricbuzz never flags as complete); the admin finalize card has a checkbox for it, off by default, with warning copy.
 * Re-running "Finalize" for an already-scored match is allowed (idempotent overwrite) — useful if Cricbuzz's data was corrected after the fact.
+* **Every finalize (and re-finalize) writes an `auditLog` entry** — see "Audit Trail" below.
+
+## Audit Trail
+
+A minimal `auditLog` Firestore collection (Admin SDK-write-only, admin-read-only via `firestore.rules` — no client write path exists) records privileged mutations: `{ action, actorUid, matchId?, motmPlayerId?, targetUid?, at }`.
+
+* `POST /api/finalize-match` writes a `finalize_match` entry in the same batch as the scoring write, so it's atomic with it.
+* `POST /api/admin/users` writes a `grant_admin`/`revoke_admin` entry after `setCustomUserClaims` succeeds.
+* The submission-visibility toggle is client-written (no API route), so instead of a separate log entry it just carries its own `updatedBy`/`updatedAt` fields on the `settings/visibility` doc itself (`setVisibilitySettings()` in `dataService.ts`).
+* `auditLog` is included in `GET /api/admin/backup`'s `BACKED_UP_COLLECTIONS`. There's deliberately no admin UI to browse it yet — the data existing is what matters for now, not a viewer.
 
 ## Weekly Leaderboard (`/leaderboard`)
 
@@ -263,8 +276,9 @@ different failure modes are handled differently on purpose:
 
 * **Backup:** `/admin`'s "Download Backup" button (`GET /api/admin/backup`,
   admin-gated) reads every collection in `BACKED_UP_COLLECTIONS` (`matches`,
-  `players`, `userSquads`, `settings`) and returns it as one downloadable
-  JSON file. Read-only, safe to click anytime, no write path involved.
+  `players`, `userSquads`, `settings`, `auditLog`) and returns it as one
+  downloadable JSON file. Read-only, safe to click anytime, no write path
+  involved.
 * **Restore:** deliberately a script, not a button —
   `node --env-file=.env.local scripts/restore-firestore.mjs <backup.json>`.
   Defaults to a dry run (prints what it *would* restore, writes nothing);
@@ -307,10 +321,13 @@ Synced by `/api/sync` (Admin SDK only — Firestore rules deny client writes).
   "scoring": {
     "finalizedAt": "2026-05-22T20:15:00.000Z",
     "motmPlayerId": "8497",
-    "playerPoints": { "8497": 62, "10276": 145 }
+    "playerPoints": { "8497": 62, "10276": 145 },
+    "warnings": null
   }
 }
 ```
+
+`scoring.warnings` is `null` once a finalize has run and every scorecard name resolved to a synced player, or `{ batsmen: string[], bowlers: string[], fielders: string[] }` naming whichever ones didn't (see Scoring Engine above). Absent entirely on matches finalized before this field existed.
 
 `scoring` is only present once an admin has finalized the match (see Scoring Engine above); `playerPoints` covers every player who had any tracked stat, not just the ones drafted.
 
@@ -350,8 +367,20 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
 Single document, admin-writable only (`request.auth.token.admin == true`), readable by any signed-in user.
 
 ```json
-{ "hideUntilToss": true, "date": "2026-04-18" }
+{ "hideUntilToss": true, "date": "2026-04-18", "updatedBy": "uid", "updatedAt": 1772400000000 }
 ```
+
+`updatedBy`/`updatedAt` are written by `setVisibilitySettings()` (`dataService.ts`) itself — this is the one privileged mutation with no API route to log through, so it carries its own lightweight trail directly on the doc instead of an `auditLog` entry.
+
+## `auditLog`
+
+Write-only from the client's perspective (every real write goes through the Admin SDK, which bypasses `firestore.rules` entirely); admin-read-only, no client write path at all. One doc per privileged mutation:
+
+```json
+{ "action": "finalize_match", "actorUid": "uid", "matchId": "152240", "motmPlayerId": "8497", "at": "2026-05-22T20:15:00.000Z" }
+```
+
+`action` is one of `finalize_match`, `grant_admin`, `revoke_admin`. `matchId`/`motmPlayerId` only appear on `finalize_match`; `targetUid` (the user whose admin status changed) only appears on `grant_admin`/`revoke_admin`. See "Audit Trail" under Scoring Engine above for which routes write to it. No admin UI browses this collection yet — deliberately deferred, since the data existing is what matters right now.
 
 ---
 
@@ -415,7 +444,7 @@ How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed tes
 
 `playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races. Its `webServer.env` also sets `FIRESTORE_EMULATOR_HOST`/`FIREBASE_AUTH_EMULATOR_HOST` — needed because server-side API routes (e.g. `/api/leaderboard`) use the Admin SDK, which isn't gated by `NEXT_PUBLIC_USE_FIREBASE_EMULATOR` (that only affects the client SDK); without it the dev server under test would call real production Firestore/Auth using `.env.local`'s real credentials instead of the seeded emulator data.
 
-**Firestore rules tests (Vitest + `@firebase/rules-unit-testing`)** — exercises `firestore.rules` directly against the emulator, independent of the app. `visibility.rules.test.ts` proves which multi-document queries Firestore's rules engine can and can't allow under the submission-visibility toggle (see "Submission Visibility Toggle" above); `squadWrite.rules.test.ts` proves the write-side lock window, shape validation, and source-of-truth cross-check on `userSquads` (see "Write rules" under Firestore Collections above). Since `request.time` in rules is always the real server clock (no time-mocking hook, and the app's date override doesn't reach rules evaluation), tests simulate pre/post-toss by computing each squad's `matchTimestamp` relative to the real `Date.now()` rather than mocking time itself:
+**Firestore rules tests (Vitest + `@firebase/rules-unit-testing`)** — exercises `firestore.rules` directly against the emulator, independent of the app. `visibility.rules.test.ts` proves which multi-document queries Firestore's rules engine can and can't allow under the submission-visibility toggle (see "Submission Visibility Toggle" above); `squadWrite.rules.test.ts` proves the write-side lock window, shape validation, and source-of-truth cross-check on `userSquads` (see "Write rules" under Firestore Collections above); `auditLog.rules.test.ts` proves `auditLog` is admin-read-only with no client write path at all (see "Audit Trail" under Scoring Engine above). Since `request.time` in rules is always the real server clock (no time-mocking hook, and the app's date override doesn't reach rules evaluation), tests simulate pre/post-toss by computing each squad's `matchTimestamp` relative to the real `Date.now()` rather than mocking time itself:
 
 ```bash
 npm run test:rules   # boots the Firestore emulator for the duration of the run, no separate `npm run emulators` needed

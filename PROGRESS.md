@@ -147,6 +147,20 @@ Then ran a throwaway Node script (`scripts/verify-prod-rules.mjs`, deleted after
 
 All test writes were reverted (squad doc restored to its prior state, throwaway match doc deleted) and confirmed via a separate Admin SDK read after cleanup. Full matrix in the script's run output; script itself was throwaway and is no longer in the repo.
 
+## Finalization hardening: unmatched-name warnings, audit trail, stricter completeness gate (2026-07-20)
+
+Audit item #3 covered three related gaps in `POST /api/finalize-match`:
+
+1. **Silent unmatched names.** `parseScorecard()`/`creditFielder()` (`src/lib/scoring.ts`) used to just skip a batsman/bowler/fielder row whose Cricbuzz name didn't resolve to a synced player — a drafted player could quietly score 0 with no signal anything went wrong. Both functions now return/receive an `unmatched: { batsmen, bowlers, fielders }` report instead. `POST /api/finalize-match` returns it in the response and stores it as `scoring.warnings` on the match doc (`null` when clean); the admin "Finalize" card on the draft page shows a persistent warning banner plus a toast right after finalizing. This surfaces the problem — it doesn't fix it; an admin still has to notice, fix the roster/sync data if needed, and re-finalize.
+2. **No audit trail.** Added a minimal `auditLog` Firestore collection (Admin-SDK-write-only, admin-read-only via `firestore.rules`, no client write path) logging finalize/re-finalize and admin grant/revoke as one doc each: `{ action, actorUid, matchId?, motmPlayerId?, targetUid?, at }`. The visibility toggle (client-written, no API route) got `updatedBy`/`updatedAt` fields on the `settings/visibility` doc itself instead of a log entry, since there's no server route to log through. Added to `BACKED_UP_COLLECTIONS`. Deliberately did **not** build a browsing UI for it — the data existing is what mattered for this pass.
+3. **Loose completeness gate.** The route used to only reject when Cricbuzz's `ismatchcomplete` was explicitly `false`; missing/undefined passed through, meaning a half-played match could be scored if the field was ever absent. Now requires `ismatchcomplete === true` unless the request body sets `force: true` (a deliberate override for an abandoned/rain-shortened match Cricbuzz will never flag complete) — surfaced as an off-by-default checkbox with warning copy on the admin finalize card.
+
+Also fixed the `/rules` page's "1 Dot Ball = 1pt" line reading as a broken promise — it's genuinely accurate (the rule does apply when data exists), the *input* just rarely shows up from Cricbuzz at this API tier (see the existing note under Scoring Engine in README.md). Added a footnote (`DOT_BALL_FOOTNOTE` in `scoringRules.ts`) rather than removing or rewriting the line itself — this is a documentation-accuracy fix only, not a scoring change; dot-ball scoring itself was explicitly not implemented in this pass.
+
+No behavior change for the honest path: a match with `ismatchcomplete: true` and no unmatched names finalizes identically to before (same points, same squads updated) — `scoring.warnings: null` and one new `auditLog` doc are the only additions. Full test matrix: `src/lib/scoring.test.ts` (unmatched-batsman/bowler/fielder fixtures added), `rules-tests/auditLog.rules.test.ts` (new — admin-read/no-client-write proof), `npm run test:rules` re-run clean (27/27) to confirm no regression to items #1/#2's rules.
+
+**Not deployed as part of this pass** — `firestore.rules` changed (new `auditLog` match block) and needs `firebase deploy --only firestore:rules`; app code needs `vercel --prod`. See items #1/#2 above for why "committed" and "deployed" aren't the same thing on this project — don't assume this shipped just because it's committed to `main`.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

@@ -110,14 +110,36 @@ function resolvePlayerId(lookup: PlayerNameLookup, name: string): string | undef
   return lookup.full.get(normalizeName(name)) ?? lookup.surnames.get(lastWord(name));
 }
 
+// Names Cricbuzz's scorecard mentioned that couldn't be resolved to a
+// synced player — surfaced instead of swallowed, since an unmatched name
+// means that player's real stats (or fielding credit) were silently
+// dropped from scoring. Deduplicated per report.
+export interface UnmatchedReport {
+  batsmen: string[];
+  bowlers: string[];
+  fielders: string[];
+}
+
+export function emptyUnmatchedReport(): UnmatchedReport {
+  return { batsmen: [], bowlers: [], fielders: [] };
+}
+
+function addUnmatched(list: string[], name: string) {
+  if (!list.includes(name)) list.push(name);
+}
+
 function creditFielder(
   statsById: Map<string, RawPlayerStats>,
   lookup: PlayerNameLookup,
   fielderName: string,
-  kind: 'catches' | 'runouts' | 'stumpings'
+  kind: 'catches' | 'runouts' | 'stumpings',
+  unmatched: UnmatchedReport
 ) {
   const id = resolvePlayerId(lookup, fielderName);
-  if (!id) return;
+  if (!id) {
+    addUnmatched(unmatched.fielders, fielderName);
+    return;
+  }
   const stats = statsById.get(id) ?? emptyStats();
   stats[kind] += 1;
   statsById.set(id, stats);
@@ -132,26 +154,27 @@ function creditFielder(
 export function creditDismissal(
   statsById: Map<string, RawPlayerStats>,
   lookup: PlayerNameLookup,
-  outdec: string | undefined
+  outdec: string | undefined,
+  unmatched: UnmatchedReport
 ) {
   if (!outdec) return;
   const text = outdec.trim();
 
   let m = text.match(/^c\s*(?:&|and)\s*b\s+(.+)$/i);
   if (m) {
-    creditFielder(statsById, lookup, m[1], 'catches');
+    creditFielder(statsById, lookup, m[1], 'catches', unmatched);
     return;
   }
 
   m = text.match(/^c\s+(.+?)\s+b\s+.+$/i);
   if (m) {
-    creditFielder(statsById, lookup, m[1], 'catches');
+    creditFielder(statsById, lookup, m[1], 'catches', unmatched);
     return;
   }
 
   m = text.match(/^st\s+(.+?)\s+b\s+.+$/i);
   if (m) {
-    creditFielder(statsById, lookup, m[1], 'stumpings');
+    creditFielder(statsById, lookup, m[1], 'stumpings', unmatched);
     return;
   }
 
@@ -161,12 +184,18 @@ export function creditDismissal(
       .split(/[/,]/)
       .map((s) => s.trim())
       .filter(Boolean)
-      .forEach((fielder) => creditFielder(statsById, lookup, fielder, 'runouts'));
+      .forEach((fielder) => creditFielder(statsById, lookup, fielder, 'runouts', unmatched));
   }
 }
 
-export function parseScorecard(scorecard: ScorecardResponse, lookup: PlayerNameLookup): Map<string, RawPlayerStats> {
+export interface ParseScorecardResult {
+  stats: Map<string, RawPlayerStats>;
+  unmatched: UnmatchedReport;
+}
+
+export function parseScorecard(scorecard: ScorecardResponse, lookup: PlayerNameLookup): ParseScorecardResult {
   const statsById = new Map<string, RawPlayerStats>();
+  const unmatched = emptyUnmatchedReport();
 
   for (const inning of scorecard.scorecard ?? []) {
     for (const batsman of inning.batsman ?? []) {
@@ -175,13 +204,18 @@ export function parseScorecard(scorecard: ScorecardResponse, lookup: PlayerNameL
         const stats = statsById.get(id) ?? emptyStats();
         stats.runs += batsman.runs ?? 0;
         statsById.set(id, stats);
+      } else {
+        addUnmatched(unmatched.batsmen, batsman.name);
       }
-      creditDismissal(statsById, lookup, batsman.outdec);
+      creditDismissal(statsById, lookup, batsman.outdec, unmatched);
     }
 
     for (const bowler of inning.bowler ?? []) {
       const id = resolvePlayerId(lookup, bowler.name);
-      if (!id) continue;
+      if (!id) {
+        addUnmatched(unmatched.bowlers, bowler.name);
+        continue;
+      }
       const stats = statsById.get(id) ?? emptyStats();
       stats.wickets += bowler.wickets ?? 0;
       stats.dotBalls += bowler.dots ?? 0;
@@ -189,7 +223,7 @@ export function parseScorecard(scorecard: ScorecardResponse, lookup: PlayerNameL
     }
   }
 
-  return statsById;
+  return { stats: statsById, unmatched };
 }
 
 // Half-century/century and 3-/5-wicket-haul bonuses don't stack — only the

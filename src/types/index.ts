@@ -35,6 +35,10 @@ export interface Match {
     finalizedAt: string;
     motmPlayerId: string | null;
     playerPoints: Record<string, number>;
+    // Names from Cricbuzz's scorecard that didn't resolve to a synced
+    // player — null once checked with nothing unmatched, absent if this
+    // match was finalized before this field existed.
+    warnings?: { batsmen: string[]; bowlers: string[]; fielders: string[] } | null;
   };
 }
 
@@ -66,4 +70,8 @@ export interface LeaderboardEntry {
 export interface VisibilitySettings {
   hideUntilToss: boolean;
   date: string; // YYYY-MM-DD — the single day this hide rule applies to
+  // Written by setVisibilitySettings() itself (client-written, no API
+  // route) so this doc carries its own lightweight audit trail.
+  updatedBy?: string | null;
+  updatedAt?: number;
 }

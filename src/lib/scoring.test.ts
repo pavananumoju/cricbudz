@@ -6,6 +6,7 @@ import {
   calculatePlayerPoints,
   calculateSquadScore,
   emptyStats,
+  emptyUnmatchedReport,
   validateScorecardResponse,
   type PlayerNameLookup,
 } from './scoring';
@@ -29,58 +30,68 @@ function lookup(): PlayerNameLookup {
 describe('creditDismissal', () => {
   it('credits a catch to the fielder, not the bowler', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'c Phil Salt b Jacob Duffy');
+    creditDismissal(stats, lookup(), 'c Phil Salt b Jacob Duffy', emptyUnmatchedReport());
     expect(stats.get('p-salt')?.catches).toBe(1);
     expect(stats.get('p-duffy')).toBeUndefined();
   });
 
   it('credits a caught-and-bowled to the bowler as the fielder', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'c & b Jacob Duffy');
+    creditDismissal(stats, lookup(), 'c & b Jacob Duffy', emptyUnmatchedReport());
     expect(stats.get('p-duffy')?.catches).toBe(1);
   });
 
   it('credits a stumping to the keeper', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'st Phil Salt b Jacob Duffy');
+    creditDismissal(stats, lookup(), 'st Phil Salt b Jacob Duffy', emptyUnmatchedReport());
     expect(stats.get('p-salt')?.stumpings).toBe(1);
   });
 
   it('credits a single-fielder run-out', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'run out (Phil Salt)');
+    creditDismissal(stats, lookup(), 'run out (Phil Salt)', emptyUnmatchedReport());
     expect(stats.get('p-salt')?.runouts).toBe(1);
   });
 
   it('credits every named fielder on a multi-fielder run-out', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'run out (Ishan Kishan/Heinrich Klaasen)');
+    creditDismissal(stats, lookup(), 'run out (Ishan Kishan/Heinrich Klaasen)', emptyUnmatchedReport());
     expect(stats.get('p-kishan')?.runouts).toBe(1);
     expect(stats.get('p-klaasen')?.runouts).toBe(1);
   });
 
   it('awards no fielding credit for a bowled dismissal', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'b Jacob Duffy');
+    creditDismissal(stats, lookup(), 'b Jacob Duffy', emptyUnmatchedReport());
     expect(stats.size).toBe(0);
   });
 
   it('awards no fielding credit for lbw', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), 'lbw b Jacob Duffy');
+    creditDismissal(stats, lookup(), 'lbw b Jacob Duffy', emptyUnmatchedReport());
     expect(stats.size).toBe(0);
   });
 
   it('is a no-op for "not out" (undefined outdec)', () => {
     const stats = new Map();
-    creditDismissal(stats, lookup(), undefined);
+    creditDismissal(stats, lookup(), undefined, emptyUnmatchedReport());
     expect(stats.size).toBe(0);
   });
 
-  it('silently skips a fielder name that has no match in the lookup', () => {
+  it('surfaces a fielder name that has no match in the lookup instead of silently dropping it', () => {
     const stats = new Map();
-    expect(() => creditDismissal(stats, lookup(), 'c Someone Unknown b Jacob Duffy')).not.toThrow();
+    const unmatched = emptyUnmatchedReport();
+    expect(() => creditDismissal(stats, lookup(), 'c Someone Unknown b Jacob Duffy', unmatched)).not.toThrow();
     expect(stats.size).toBe(0);
+    expect(unmatched.fielders).toEqual(['Someone Unknown']);
+  });
+
+  it('deduplicates the same unmatched fielder name across multiple dismissals', () => {
+    const stats = new Map();
+    const unmatched = emptyUnmatchedReport();
+    creditDismissal(stats, lookup(), 'c Someone Unknown b Jacob Duffy', unmatched);
+    creditDismissal(stats, lookup(), 'run out (Someone Unknown)', unmatched);
+    expect(unmatched.fielders).toEqual(['Someone Unknown']);
   });
 });
 
@@ -91,7 +102,7 @@ describe('surname fallback matching', () => {
     // "Phil Salt". Exact full-name matching alone misses this.
     const roster = [{ id: 'p-salt', name: 'Philip Salt' }];
     const stats = new Map();
-    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone');
+    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone', emptyUnmatchedReport());
     expect(stats.get('p-salt')?.catches).toBe(1);
   });
 
@@ -101,8 +112,10 @@ describe('surname fallback matching', () => {
       { id: 'p-salt-2', name: 'Jordan Salt' },
     ];
     const stats = new Map();
-    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone');
+    const unmatched = emptyUnmatchedReport();
+    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone', unmatched);
     expect(stats.size).toBe(0);
+    expect(unmatched.fielders).toEqual(['Phil Salt']);
   });
 
   it('resolves via exact full-name match even when the surname alone would be ambiguous', () => {
@@ -111,7 +124,7 @@ describe('surname fallback matching', () => {
       { id: 'p-other', name: 'Jordan Salt' },
     ];
     const stats = new Map();
-    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone');
+    creditDismissal(stats, buildPlayerNameLookup(roster), 'c Phil Salt b Someone', emptyUnmatchedReport());
     expect(stats.get('p-exact')?.catches).toBe(1);
     expect(stats.get('p-other')).toBeUndefined();
   });
@@ -136,7 +149,7 @@ describe('parseScorecard', () => {
       ],
     };
 
-    const stats = parseScorecard(scorecard, lookup());
+    const { stats, unmatched } = parseScorecard(scorecard, lookup());
 
     expect(stats.get('p-head')?.runs).toBe(11);
     expect(stats.get('p-duffy')?.wickets).toBe(2);
@@ -145,6 +158,9 @@ describe('parseScorecard', () => {
     expect(stats.get('p-kishan')?.catches).toBe(1);
     expect(stats.get('p-kishan')?.runs).toBe(80);
     expect(stats.get('p-bhuvi')?.dotBalls).toBe(5);
+    expect(unmatched.batsmen).toEqual([]);
+    expect(unmatched.bowlers).toEqual([]);
+    expect(unmatched.fielders).toEqual([]);
   });
 
   it('accumulates stats for a player appearing across two innings', () => {
@@ -154,13 +170,49 @@ describe('parseScorecard', () => {
         { bowler: [{ name: 'Jacob Duffy', wickets: 1, dots: 3 }] },
       ],
     };
-    const stats = parseScorecard(scorecard, lookup());
+    const { stats } = parseScorecard(scorecard, lookup());
     expect(stats.get('p-duffy')?.wickets).toBe(3);
     expect(stats.get('p-duffy')?.dotBalls).toBe(7);
   });
 
   it('returns an empty map for an empty scorecard', () => {
-    expect(parseScorecard({}, lookup()).size).toBe(0);
+    expect(parseScorecard({}, lookup()).stats.size).toBe(0);
+  });
+
+  it('surfaces an unmatched batsman name instead of silently dropping their runs', () => {
+    // A name with neither a full nor surname match against the synced
+    // roster — e.g. a substitute Cricbuzz lists that was never drafted-pool
+    // synced, or a genuine spelling divergence beyond the surname fallback.
+    const scorecard = {
+      scorecard: [
+        { batsman: [{ name: 'Completely Unknown Player', runs: 42, outdec: 'not out' }] },
+      ],
+    };
+    const { stats, unmatched } = parseScorecard(scorecard, lookup());
+    expect(stats.size).toBe(0);
+    expect(unmatched.batsmen).toEqual(['Completely Unknown Player']);
+  });
+
+  it('surfaces an unmatched bowler name instead of silently dropping their wickets', () => {
+    const scorecard = {
+      scorecard: [{ bowler: [{ name: 'Completely Unknown Bowler', wickets: 3, dots: 2 }] }],
+    };
+    const { stats, unmatched } = parseScorecard(scorecard, lookup());
+    expect(stats.size).toBe(0);
+    expect(unmatched.bowlers).toEqual(['Completely Unknown Bowler']);
+  });
+
+  it('surfaces an unmatched fielder name from a dismissal alongside a matched batsman', () => {
+    const scorecard = {
+      scorecard: [
+        {
+          batsman: [{ name: 'Travis Head', runs: 11, outdec: 'c Completely Unknown Fielder b Jacob Duffy' }],
+        },
+      ],
+    };
+    const { stats, unmatched } = parseScorecard(scorecard, lookup());
+    expect(stats.get('p-head')?.runs).toBe(11);
+    expect(unmatched.fielders).toEqual(['Completely Unknown Fielder']);
   });
 });
 

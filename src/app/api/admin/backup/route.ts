@@ -7,7 +7,7 @@ import { requireAdmin } from '@/lib/adminAuth';
 
 // Every collection a restore needs to fully reconstruct the app's data.
 // Keep this list in sync with scripts/restore-firestore.mjs.
-const BACKED_UP_COLLECTIONS = ['matches', 'players', 'userSquads', 'settings'];
+const BACKED_UP_COLLECTIONS = ['matches', 'players', 'userSquads', 'settings', 'auditLog'];
 
 export async function GET(req: Request) {
   const authResult = await requireAdmin(req);

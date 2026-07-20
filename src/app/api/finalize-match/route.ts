@@ -18,14 +18,14 @@ export async function POST(req: Request) {
   const authResult = await requireAdmin(req);
   if ('error' in authResult) return authResult.error;
 
-  let body: { matchId?: string; motmPlayerId?: string | null };
+  let body: { matchId?: string; motmPlayerId?: string | null; force?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { matchId, motmPlayerId } = body;
+  const { matchId, motmPlayerId, force } = body;
   if (!matchId) {
     return NextResponse.json({ error: 'matchId is required' }, { status: 400 });
   }
@@ -48,9 +48,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  if (scorecard?.ismatchcomplete === false) {
+  // Require an explicit `true`, not just "not false" — a missing/undefined
+  // ismatchcomplete field is not proof the match is done, and scoring a
+  // half-played match would silently write wrong points. `force: true`
+  // is the deliberate override for the rare legitimate case (an abandoned
+  // or rain-shortened match Cricbuzz never flags as complete).
+  if (scorecard?.ismatchcomplete !== true && !force) {
     return NextResponse.json(
-      { error: 'Cricbuzz reports this match is not yet complete. Finalize once it has actually ended.' },
+      {
+        error:
+          'Cricbuzz has not confirmed this match is complete (ismatchcomplete is false or missing). ' +
+          'Finalize once it has actually ended, or retry with force to override for an edge case like an abandoned match.',
+      },
       { status: 409 }
     );
   }
@@ -66,7 +75,8 @@ export async function POST(req: Request) {
   }
 
   const lookup = buildPlayerNameLookup(players);
-  const rawStatsById = parseScorecard(scorecard, lookup);
+  const { stats: rawStatsById, unmatched } = parseScorecard(scorecard, lookup);
+  const hasUnmatched = unmatched.batsmen.length > 0 || unmatched.bowlers.length > 0 || unmatched.fielders.length > 0;
 
   const playerPoints: Record<string, number> = {};
   for (const player of players) {
@@ -97,7 +107,16 @@ export async function POST(req: Request) {
       finalizedAt: new Date().toISOString(),
       motmPlayerId: motmPlayerId ?? null,
       playerPoints,
+      warnings: hasUnmatched ? unmatched : null,
     },
+  });
+
+  batch.set(adminDb.collection('auditLog').doc(), {
+    action: 'finalize_match',
+    actorUid: authResult.uid,
+    matchId,
+    motmPlayerId: motmPlayerId ?? null,
+    at: new Date().toISOString(),
   });
 
   await batch.commit();
@@ -107,5 +126,6 @@ export async function POST(req: Request) {
     matchId,
     squadsUpdated,
     playerPoints,
+    unmatched,
   });
 }

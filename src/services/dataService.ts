@@ -266,5 +266,10 @@ export async function getVisibilitySettings(): Promise<VisibilitySettings | null
 }
 
 export async function setVisibilitySettings(settings: VisibilitySettings) {
-  await setDoc(doc(db, 'settings', 'visibility'), settings);
+  const user = auth.currentUser;
+  await setDoc(doc(db, 'settings', 'visibility'), {
+    ...settings,
+    updatedBy: user?.uid ?? null,
+    updatedAt: Date.now(),
+  });
 }

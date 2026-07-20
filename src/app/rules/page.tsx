@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield, Info, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
-import { SCORING_RULES_DISPLAY, MVP_MULTIPLIER } from '@/lib/scoringRules';
+import { SCORING_RULES_DISPLAY, MVP_MULTIPLIER, DOT_BALL_FOOTNOTE } from '@/lib/scoringRules';
 
 export default function RulesPage() {
   const scoringRules = SCORING_RULES_DISPLAY;
@@ -67,6 +67,7 @@ export default function RulesPage() {
             </tbody>
           </table>
         </Card>
+        <p className="text-[10px] text-muted leading-relaxed mt-3 px-1">{DOT_BALL_FOOTNOTE}</p>
       </section>
     </div>
   );
