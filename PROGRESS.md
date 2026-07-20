@@ -110,6 +110,30 @@ duplicating the same Bearer-token/custom-claim check inline.
 the user's simplified spec for that page was just users/admin-status, so
 those actions were deliberately left where they already were.
 
+## Visibility toggle: leaderboard/Squad Room list queries moved server-side (2026-07-19)
+
+An architecture audit claimed the "hide trios until toss" admin toggle blanked the leaderboard and every Squad Room for the entire day it was set, due to two root causes: (A) Firestore rules being unprovable for the leaderboard's and Squad Room's `list` queries, and (B) `hasTossPassed()` comparing `timestamp.value(matchTimestamp)` against an ISO string instead of epoch millis.
+
+Before changing anything, wrote Firestore-emulator rules tests (`rules-tests/`, `npm run test:rules`) to confirm both claims. **Root cause A was real; root cause B was not** — `timestamp.value()` parses an ISO 8601 string correctly in practice (verified with both a post-toss case that succeeds and a pre-toss control case that still correctly denies). Don't re-introduce a `matchStartMs`/epoch-millis field to "fix" root cause B — there's nothing to fix.
+
+Root cause A also turned out to be more specific than described: pinning `matchDay` via an equality filter alongside `matchId` *does* make Squad Room's query provable for a match on a **different** day than the toggle's date, but **not** for a match on the toggle's own day even after toss has passed for it — `hasTossPassed()` still depends on `matchTimestamp`, an unconstrained per-document field. This isn't a rules bug to fix; it's a structural limit of Firestore's list-query provability (it can't prove a rule that depends on `request.time` compared against a field no equality/range filter pins). See `rules-tests/visibility.rules.test.ts` for the empirical proof.
+
+**Fix:** `GET /api/leaderboard` and `GET /api/matches/[matchId]/squads` (both Admin SDK, any signed-in user via `requireAuth()`) reimplement the same visibility policy in TypeScript, using the real match doc and the server's own clock. `firestore.rules` itself is **unchanged** — it's still correct and still the enforcement mechanism for single-document reads (a user's own squad). `dataService.ts`'s `getSquadsInDateRange()`/`getSquadsForMatch()` kept their signatures and now call these routes internally, so no page-level code needed to change. Full reasoning and the exact provability boundary: README.md's "Submission Visibility Toggle" section.
+
+**Revisit if:** audit item #2 (locking squad edits after toss server-side) gets picked up — `GET /api/matches/[matchId]/squads` is a natural place to also enforce a matching write-side check, since it already computes "has toss passed" for that match server-side.
+
+## Squad writes locked server-side via firestore.rules (2026-07-20)
+
+Audit item #2: `firestore.rules` only ever checked ownership on `userSquads` writes — no time check, no shape check, no validation of the client-supplied denormalized `matchTimestamp`/`matchDay`. A browser-console user could edit their trio after toss (or after the match), submit a malformed squad, or spoof `matchTimestamp`/`matchDay` to dodge the visibility toggle. Confirmed all four holes empirically first (`rules-tests/squadWrite.rules.test.ts`, written against the *unmodified* rules and initially asserting they were accepted) before changing anything.
+
+**Fix, in `firestore.rules` alone — no new field, no backfill:** the audit assumed a `matchStartMs` epoch-millis field would be needed (carried over from an earlier draft of item #1 that was ultimately *not* built that way — see the visibility-toggle entry above: `timestamp.value()` already parses the existing ISO `matchTimestamp` string correctly). Reused that same finding here instead of introducing a new field:
+
+* **Lock window** — `create`/`update`/`delete` all now require `!hasTossPassed(matchTimestamp)` (the same helper the read rule already used), using the doc's *existing* `matchTimestamp` on delete/pre-update-check and the *incoming* one on create/update.
+* **Source-of-truth cross-check** — one extra `get()` on the linked `matches/{matchId}` doc per create/update verifies `request.resource.data.matchTimestamp == match.date` exactly, and that `matchDay` is a literal prefix of it (rules has no substring/slice operator, so this is done via a `matches()` regex anchor: `matchTimestamp.matches(matchDay + 'T.*')`). This closes the spoofing hole for both fields in one check, since the visibility toggle's `matchDay` gate and `hasTossPassed`'s `matchTimestamp` are now pinned to real match data.
+* **Shape validation** — `players` must be a list of exactly 3, `mvpId` must be one of them, and the doc ID must equal `{userId}_{matchId}` (mirrors `draftRules.ts`). The dual-franchise check stays client-only — needs player-team data the rules engine doesn't have, and isn't meaningfully exploitable on its own.
+
+`/api/finalize-match` (Admin SDK) bypasses rules entirely and is unaffected. No client-side messages, UX, or `dataService.ts` changed — this is a pure backstop; the honest pre-lock create/edit/delete flow is byte-for-byte the same request shape as before, just now also accepted by rules instead of merely trusted. Full enforced/rejected matrix: `rules-tests/squadWrite.rules.test.ts` (21/21 rules tests, 69/69 unit tests, 8/8 E2E all green after the change). `firestore.rules` was edited but **not deployed** as part of this change — deploy manually with `firebase deploy --only firestore:rules` after review.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

@@ -203,15 +203,27 @@ export async function getUserSquads(): Promise<UserSquad[]> {
   }
 }
 
-// Returns every user's squad for a match. Firestore rules silently exclude
-// squads the current user isn't allowed to see yet (own squad, or others'
-// once toss has passed / the visibility toggle isn't active for that day) —
-// this never throws for a partially-visible result set.
+// Returns every user's squad for a match, filtered by the same visibility
+// policy the Firestore rule expresses (own squad, or others' once toss has
+// passed / the visibility toggle isn't active for that day). Goes through
+// GET /api/matches/[matchId]/squads (server-side, Admin SDK) rather than a
+// direct Firestore query: a raw client query can't be proven safe by
+// Firestore's rules engine for a match on the visibility toggle's own day,
+// even once toss has passed for it, because hasTossPassed() depends on a
+// per-document field no query filter can usefully pin (see firestore.rules
+// and rules-tests/ for the full reasoning). The route reimplements the
+// same policy in code, using the real match doc and the server clock.
 export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
   try {
-    const q = query(collection(db, 'userSquads'), where('matchId', '==', matchId));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => d.data() as UserSquad);
+    const user = auth.currentUser;
+    if (!user) return [];
+    const token = await user.getIdToken();
+    const res = await fetch(`/api/matches/${matchId}/squads`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`GET /api/matches/${matchId}/squads failed: ${res.status}`);
+    const data = (await res.json()) as { squads: UserSquad[] };
+    return data.squads;
   } catch (err) {
     console.error('getSquadsForMatch error:', err);
     return [];
@@ -220,19 +232,23 @@ export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
 
 // Every scored squad whose matchDay falls within [startDay, endDay]
 // (inclusive, both YYYY-MM-DD) — used to compute a week's leaderboard.
-// Firestore rules apply the same per-document visibility as any other
-// userSquads read, but a *scored* squad only exists once its match is
-// completed, which is always past toss — so these are visible to everyone
-// regardless of the submission-visibility toggle.
+// Goes through GET /api/leaderboard (server-side, Admin SDK) rather than a
+// direct Firestore query: this matchDay RANGE filter can't be proven
+// against the submission-visibility toggle's per-document Firestore rule
+// (see firestore.rules / rules-tests/), so a client-side query for it is
+// rejected outright on any day the toggle is on. See the route's comment
+// for how it applies the equivalent policy in code instead.
 export async function getSquadsInDateRange(startDay: string, endDay: string): Promise<UserSquad[]> {
   try {
-    const q = query(
-      collection(db, 'userSquads'),
-      where('matchDay', '>=', startDay),
-      where('matchDay', '<=', endDay)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as UserSquad);
+    const user = auth.currentUser;
+    if (!user) return [];
+    const token = await user.getIdToken();
+    const res = await fetch(`/api/leaderboard?startDay=${startDay}&endDay=${endDay}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`GET /api/leaderboard failed: ${res.status}`);
+    const data = (await res.json()) as { squads: UserSquad[] };
+    return data.squads;
   } catch (err) {
     console.error('getSquadsInDateRange error:', err);
     return [];

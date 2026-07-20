@@ -27,6 +27,13 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       NEXT_PUBLIC_USE_FIREBASE_EMULATOR: 'true',
+      // Server-side API routes (e.g. GET /api/leaderboard) use the Admin
+      // SDK, which isn't gated by NEXT_PUBLIC_USE_FIREBASE_EMULATOR (that
+      // only affects the client SDK). Without these, the dev server under
+      // test would call out to real production Firestore/Auth using
+      // .env.local's real credentials instead of the seeded emulator data.
+      FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+      FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
     },
   },
 });

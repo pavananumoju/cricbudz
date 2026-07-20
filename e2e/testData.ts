@@ -17,6 +17,11 @@ export const TEST_MATCH_VISIBILITY_ID = 'e2e-match-visibility';
 export const TEST_MATCH_SCORED_ID = 'e2e-match-scored';
 export const TEST_USER_SCORE = 50;
 export const TEST_USER_2_SCORE = 30;
+// A match from several days ago (a DIFFERENT day than any visibility
+// toggle set for "today") with a submitted, unscored squad — exercises
+// Squad Room's cross-day visibility specifically, separate from the
+// scored/leaderboard squads above.
+export const TEST_MATCH_PAST_ID = 'e2e-match-past';
 
 export const TEST_PLAYERS = [
   { id: 'e2e-p1', name: 'Test Batter One', team: 'SRH', role: 'BATSMAN', price: 9 },

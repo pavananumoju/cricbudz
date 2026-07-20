@@ -35,6 +35,27 @@ service cloud.firestore {
       return exists(path) && get(path).data.hideUntilToss == true && get(path).data.date == matchDay;
     }
 
+    // Cross-checks a write's denormalized matchTimestamp/matchDay against
+    // the real match doc (one extra read) so a client can't spoof toss time
+    // or the visibility-toggle day fields. matchDay is verified as a
+    // literal prefix of matchTimestamp via matches() (a full-string regex
+    // match) since rules has no substring/slice operator.
+    function matchesSourceOfTruth(data) {
+      let m = get(/databases/$(database)/documents/matches/$(data.matchId)).data;
+      return data.matchTimestamp == m.date &&
+        data.matchTimestamp.matches(data.matchDay + 'T.*');
+    }
+
+    // Exactly 3 players, MVP among them, doc ID consistent with {userId}_{matchId}
+    // — mirrors src/lib/draftRules.ts's shape rules (dual-franchise check stays
+    // client-only; it needs player-team data rules doesn't have).
+    function isValidSquadShape(squadId, data) {
+      return data.players is list &&
+        data.players.size() == 3 &&
+        data.mvpId in data.players &&
+        squadId == data.userId + '_' + data.matchId;
+    }
+
     match /userSquads/{squadId} {
       allow read: if isSignedIn() && (
         resource == null ||
@@ -42,9 +63,17 @@ service cloud.firestore {
         hasTossPassed(resource.data.matchTimestamp) ||
         !isVisibilityHiddenForDay(resource.data.matchDay)
       );
-      allow create: if isOwner(request.resource.data.userId);
-      allow update: if isOwner(resource.data.userId) && isOwner(request.resource.data.userId);
-      allow delete: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId) &&
+        isValidSquadShape(squadId, request.resource.data) &&
+        matchesSourceOfTruth(request.resource.data) &&
+        !hasTossPassed(request.resource.data.matchTimestamp);
+      allow update: if isOwner(resource.data.userId) && isOwner(request.resource.data.userId) &&
+        isValidSquadShape(squadId, request.resource.data) &&
+        matchesSourceOfTruth(request.resource.data) &&
+        !hasTossPassed(resource.data.matchTimestamp) &&
+        !hasTossPassed(request.resource.data.matchTimestamp);
+      allow delete: if isOwner(resource.data.userId) &&
+        !hasTossPassed(resource.data.matchTimestamp);
     }
 
     match /settings/{settingId} {

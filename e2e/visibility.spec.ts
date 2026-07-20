@@ -1,6 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { TOKENS_FILE, TEST_MATCH_VISIBILITY_ID, TEST_PLAYERS } from './testData';
+import {
+  TOKENS_FILE,
+  TEST_MATCH_VISIBILITY_ID,
+  TEST_MATCH_PAST_ID,
+  TEST_MATCH_LOCKED_ID,
+  TEST_USER_SCORE,
+  TEST_USER_2_SCORE,
+  TEST_PLAYERS,
+} from './testData';
 
 // This is the exact scenario that can't be tested manually with only one
 // person: does user2 actually see (or not see) user1's trio, depending on
@@ -73,4 +81,69 @@ test('visibility toggle hides trios pre-toss, and turning it off reveals them', 
   await expect(user2Page.getByText(/hidden until toss/i)).not.toBeVisible();
   await expect(user2Page.getByText('E2E User')).toBeVisible();
   await expect(user2Page.getByText(TEST_PLAYERS[0].name.split(' ').pop()!, { exact: false }).first()).toBeVisible();
+});
+
+// These three cover the gap the architecture audit found: the toggle is
+// only supposed to hide one specific day's not-yet-toss trios, but a naive
+// Firestore rules implementation made it silently blank the leaderboard and
+// every Squad Room for the whole day instead. See rules-tests/ for the
+// underlying Firestore-rules-level proof; these confirm the real UI is
+// unaffected end-to-end.
+
+test('leaderboard shows current standings while the visibility toggle is ON for today', async ({ browser }) => {
+  const { userToken2, adminToken } = JSON.parse(readFileSync(TOKENS_FILE, 'utf-8'));
+
+  const adminPage = await (await browser.newContext()).newPage();
+  const user2Page = await (await browser.newContext()).newPage();
+  await signIn(adminPage, adminToken);
+  await signIn(user2Page, userToken2);
+
+  await setVisibilityToggle(adminPage, true);
+
+  await user2Page.goto('/leaderboard');
+  await expect(user2Page.getByText('E2E User', { exact: true })).toBeVisible();
+  await expect(user2Page.getByText('E2E User Two')).toBeVisible();
+  await expect(user2Page.getByText(String(TEST_USER_SCORE))).toBeVisible();
+  await expect(user2Page.getByText(String(TEST_USER_2_SCORE))).toBeVisible();
+
+  await setVisibilityToggle(adminPage, false);
+});
+
+test('a past match\'s Squad Room stays visible while the visibility toggle is ON for today', async ({ browser }) => {
+  const { userToken2, adminToken } = JSON.parse(readFileSync(TOKENS_FILE, 'utf-8'));
+
+  const adminPage = await (await browser.newContext()).newPage();
+  const user2Page = await (await browser.newContext()).newPage();
+  await signIn(adminPage, adminToken);
+  await signIn(user2Page, userToken2);
+
+  await setVisibilityToggle(adminPage, true);
+
+  // TEST_MATCH_PAST_ID happened days ago — a different day than the
+  // toggle's date — so its submitted squad should be visible regardless.
+  await user2Page.goto(`/matches/${TEST_MATCH_PAST_ID}`);
+  await expect(user2Page.getByText(/hidden until toss/i)).not.toBeVisible();
+  await expect(user2Page.getByText('E2E User', { exact: true })).toBeVisible();
+
+  await setVisibilityToggle(adminPage, false);
+});
+
+test('a post-toss squad for TODAY appears in Squad Room without flipping the toggle off', async ({ browser }) => {
+  const { userToken, adminToken } = JSON.parse(readFileSync(TOKENS_FILE, 'utf-8'));
+
+  const adminPage = await (await browser.newContext()).newPage();
+  const user1Page = await (await browser.newContext()).newPage();
+  await signIn(adminPage, adminToken);
+  await signIn(user1Page, userToken);
+
+  await setVisibilityToggle(adminPage, true);
+
+  // TEST_MATCH_LOCKED_ID started an hour ago (today) — toss has already
+  // passed for it, so user2's seeded squad should be visible even though
+  // the toggle is on for this same day and never gets turned off below.
+  await user1Page.goto(`/matches/${TEST_MATCH_LOCKED_ID}`);
+  await expect(user1Page.getByText(/hidden until toss/i)).not.toBeVisible();
+  await expect(user1Page.getByText('E2E User Two')).toBeVisible();
+
+  await setVisibilityToggle(adminPage, false);
 });

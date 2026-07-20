@@ -22,6 +22,7 @@ import {
   TEST_MATCH_SCORED_ID,
   TEST_USER_SCORE,
   TEST_USER_2_SCORE,
+  TEST_MATCH_PAST_ID,
   TEST_PLAYERS,
   TOKENS_FILE,
 } from './testData';
@@ -71,6 +72,17 @@ export async function runSeed() {
     status: 'UPCOMING',
     matchDesc: 'E2E Visibility Test Match',
   });
+  const pastMatchDate = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days ago
+  await db.collection('matches').doc(TEST_MATCH_PAST_ID).set({
+    id: TEST_MATCH_PAST_ID,
+    team1: 'SRH',
+    team2: 'RCB',
+    date: pastMatchDate,
+    venue: 'Test Ground',
+    status: 'COMPLETE',
+    matchDesc: 'E2E Past Match',
+  });
+
   const scoredMatchDate = new Date(now - 5 * 60 * 60 * 1000).toISOString(); // 5h ago — completed
   await db.collection('matches').doc(TEST_MATCH_SCORED_ID).set({
     id: TEST_MATCH_SCORED_ID,
@@ -133,6 +145,42 @@ export async function runSeed() {
       userDisplayName: 'E2E User Two',
       userPhotoURL: null,
       totalPoints: TEST_USER_2_SCORE,
+    });
+
+  const pastMatchDay = pastMatchDate.slice(0, 10);
+  await db
+    .collection('userSquads')
+    .doc(`${TEST_UID}_${TEST_MATCH_PAST_ID}`)
+    .set({
+      userId: TEST_UID,
+      matchId: TEST_MATCH_PAST_ID,
+      players: TEST_PLAYERS.slice(0, 3).map((p) => p.id),
+      mvpId: TEST_PLAYERS[0].id,
+      createdAt: Date.now(),
+      matchTimestamp: pastMatchDate,
+      matchDay: pastMatchDay,
+      userDisplayName: 'E2E User',
+      userPhotoURL: null,
+    });
+
+  // Toss has already passed for TEST_MATCH_LOCKED_ID (started 1h ago) —
+  // seeded directly since the UI itself blocks drafting once locked (see
+  // draft.spec.ts). Owned by user2 so it doesn't collide with any squad
+  // draft.spec.ts's user1 flows might expect for this match.
+  const lockedMatchDay = lockedMatchDate.slice(0, 10);
+  await db
+    .collection('userSquads')
+    .doc(`${TEST_UID_2}_${TEST_MATCH_LOCKED_ID}`)
+    .set({
+      userId: TEST_UID_2,
+      matchId: TEST_MATCH_LOCKED_ID,
+      players: TEST_PLAYERS.slice(0, 3).map((p) => p.id),
+      mvpId: TEST_PLAYERS[0].id,
+      createdAt: Date.now(),
+      matchTimestamp: lockedMatchDate,
+      matchDay: lockedMatchDay,
+      userDisplayName: 'E2E User Two',
+      userPhotoURL: null,
     });
 
   const userToken = await auth.createCustomToken(TEST_UID);

@@ -52,6 +52,8 @@ ipl-fantasy-arena/
 │   │   ├── api/
 │   │   │   ├── sync/                 # Admin-only ETL: Cricbuzz -> Firestore (matches + players)
 │   │   │   ├── finalize-match/       # Admin-only: fetch scorecard, score every squad for a match
+│   │   │   ├── leaderboard/          # Any signed-in user: server-side week-range squad query (Admin SDK)
+│   │   │   ├── matches/[matchId]/squads/  # Any signed-in user: server-side Squad Room query (Admin SDK)
 │   │   │   └── admin/
 │   │   │       ├── users/            # Admin-only: list users, grant/revoke the `admin` custom claim
 │   │   │       └── backup/           # Admin-only: read-only full Firestore export as downloadable JSON
@@ -103,7 +105,7 @@ ipl-fantasy-arena/
 │   ├── lib/
 │   │   ├── firebase.ts               # Client SDK (reads, user-squad writes); connects to emulators in E2E
 │   │   ├── firebase-admin.ts         # Server-only Admin SDK (bypasses Firestore rules)
-│   │   ├── adminAuth.ts              # requireAdmin(req): shared Bearer-token + admin-claim check for API routes
+│   │   ├── adminAuth.ts              # requireAdmin()/requireAuth(): shared Bearer-token checks for API routes
 │   │   ├── rapidapi.ts               # Cricbuzz endpoint wrappers
 │   │   ├── draftRules.ts             # Pure, unit-tested squad validation (dual-franchise, MVP, etc.)
 │   │   ├── scoringRules.ts           # Single source of truth for point values (used by /rules AND scoring.ts)
@@ -128,7 +130,11 @@ ipl-fantasy-arena/
 │   ├── seed.ts / testData.ts         # Fixed test users/matches/players seeded before each run
 │   ├── fixtures.ts                   # signInAsUser/signInAsUser2/signInAsAdmin test fixtures
 │   └── *.spec.ts
+├── rules-tests/                       # firestore.rules tests (Vitest + @firebase/rules-unit-testing)
+│   ├── visibility.rules.test.ts      # Proves which multi-document queries the rules engine can/can't allow
+│   └── squadWrite.rules.test.ts      # Proves the lock window / shape / source-of-truth checks on userSquads writes
 ├── vitest.config.ts                  # Unit/component test config (jsdom + RTL)
+├── vitest.rules.config.ts            # Separate Node-environment config for rules-tests/
 ├── playwright.config.ts              # E2E test config (webServer + globalSetup seeding)
 ├── firestore.rules                   # Deployed via `firebase deploy --only firestore:rules`
 ├── firebase.json / .firebaserc       # Firebase CLI project/rules/emulator config
@@ -177,9 +183,23 @@ Prevents users from seeing (and copying) each other's trio picks before toss on 
 * Admin sets `{ hideUntilToss: true, date: "YYYY-MM-DD" }` in a single `settings/visibility` document.
 * The toggle only affects **that one day's** not-yet-toss matches. Past/completed matches are **always** visible to everyone regardless of the toggle. Once toss passes for a match, it becomes visible to everyone too, toggle or not.
 * No cron/scheduled job needed to "reset" it — because the toggle carries the specific date it applies to, it's automatically inert for every other day without any manual cleanup.
-* **Enforced in `firestore.rules`** (not just hidden in the UI) — a squad doc carries denormalized `matchTimestamp`/`matchDay` fields so the rule can evaluate "has toss passed" / "does the toggle apply today" without extra reads. See Firestore Collections below.
 * Surfaced on the draft page (`/matches/[id]`) as a "Squad Room" section showing every other user's submitted trio for that match (or an explanatory hidden-until-toss message) once visible.
-* Caveat: the Dev Control Center's date override is a client-only simulation — it does **not** change what time Firestore rules see (`request.time` is always the real server clock). Testing visibility transitions with the date override can therefore look inconsistent between the UI's "locked/completed" state and what the rules actually reveal; this is expected, not a bug.
+
+**Enforcement is split across two mechanisms, not just `firestore.rules`.** A squad doc carries denormalized `matchTimestamp`/`matchDay` fields (see Firestore Collections below) so `firestore.rules` can evaluate "has toss passed" / "does the toggle apply today" for a **single-document read** (e.g. a user reading their own squad) without extra reads — that part works as originally designed. But Firestore's rules engine can only allow a **list query** (an entire `where(...)` result set) if it can *prove* the rule holds for every possible matching document, and that proof only works when every field the rule reads is pinned by an equality filter in the query. `matchTimestamp`/`matchDay` aren't provable this way for two multi-document reads the app actually needs:
+
+* **The leaderboard's week query** (`matchDay` as a *range*, not an equality filter).
+* **Squad Room's cross-user query for a match on the toggle's own day** — even once toss has passed for that specific match, the rule can't prove it across the whole result set, because "has toss passed" depends on `matchTimestamp`, a field no query filter can usefully pin.
+
+Both were previously implemented as direct client Firestore queries, which meant the entire query was silently rejected (caught, and treated as "no data") on any day the toggle was on — blanking the leaderboard and every Squad Room for the whole day, not just the one match/day the toggle was meant to hide. (See `rules-tests/visibility.rules.test.ts` for the emulator-verified proof of exactly which queries fail and why, run via `npm run test:rules`.)
+
+Fixed by moving both reads server-side, where the same visibility policy is applied in TypeScript instead of Firestore rules (the Admin SDK bypasses rules entirely, so this is safe — it's server code, not something a client can spoof):
+
+* `GET /api/leaderboard?startDay=...&endDay=...` — any signed-in user (not admin-gated). Returns every squad in the day range that has `totalPoints` set. A squad only gets `totalPoints` once an admin finalizes its match, which only ever happens well after toss — so "has `totalPoints`" is exactly the set of squads the toggle was never meant to hide.
+* `GET /api/matches/[matchId]/squads` — any signed-in user. Reads the match doc + all its squads via the Admin SDK, then filters in code using the real match start time and the real server clock: a squad is returned if the caller owns it, or toss has passed for that match, or the toggle isn't hiding that match's day.
+
+`dataService.ts`'s `getSquadsInDateRange()` and `getSquadsForMatch()` keep their original signatures and call these routes internally, so the leaderboard and draft pages didn't need to change. Direct client Firestore reads are still used (and still enforced by `firestore.rules`) for single-document cases: a user's own squad, and the `settings/visibility` doc itself.
+
+Caveat: the Dev Control Center's date override is a client-only simulation — it does **not** change what time Firestore rules or the two API routes above see (they always use the real server clock). Testing visibility transitions with the date override can therefore look inconsistent between the UI's "locked/completed" state and what's actually enforced server-side; this is expected, not a bug.
 
 ## Scoring Engine
 
@@ -321,7 +341,9 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
 
 `matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `totalPoints` is absent until an admin finalizes that match's scoring.
 
-**Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day. In practice this means every *scored* squad (finalization only ever happens post-completion, always past toss) is visible to everyone — which is exactly what the leaderboard needs.
+**Read rules:** a user can always read their own squad. Another user's squad is readable once toss has passed for that match, *or* if the visibility toggle isn't active for that match's day — this is what `firestore.rules` enforces for single-document reads. Multi-document reads (the leaderboard, Squad Room) can't be proven safe by Firestore's rules engine for this rule and go through server-side API routes instead — see "Submission Visibility Toggle" above for why and how.
+
+**Write rules:** `firestore.rules` enforces the 30-minute pre-toss lock, squad shape, and the denormalized fields — not just the UI. On every create/update/delete: the write is rejected once `request.time` is past `matchTimestamp - 30min` (toss); on create/update, one extra read (`get()` on the linked `matches/{matchId}` doc) cross-checks that the submitted `matchTimestamp` exactly matches the match's real `date`, and that `matchDay` is a literal prefix of it — so a client can't spoof either field to fake a still-open lock window or dodge the visibility toggle. Shape is validated too: `players` must be a list of exactly 3, `mvpId` must be one of them, and the doc ID must equal `{userId}_{matchId}`. The dual-franchise check stays client/UI-only (`draftRules.ts`) since it needs player-team data the rules engine doesn't have — low-value to duplicate server-side. See `rules-tests/squadWrite.rules.test.ts` for the full enforced/rejected matrix.
 
 ## `settings/visibility`
 
@@ -391,7 +413,15 @@ npm run test:e2e    # in another terminal — seeds the emulator, then runs the 
 
 How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment. The seed also pre-writes a couple of already-scored squads (bypassing the real finalize-match API, which calls the real RapidAPI) so `leaderboard.spec.ts` can exercise the real Firestore query + rules + rendering pipeline without a live scorecard fetch.
 
-`playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races.
+`playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races. Its `webServer.env` also sets `FIRESTORE_EMULATOR_HOST`/`FIREBASE_AUTH_EMULATOR_HOST` — needed because server-side API routes (e.g. `/api/leaderboard`) use the Admin SDK, which isn't gated by `NEXT_PUBLIC_USE_FIREBASE_EMULATOR` (that only affects the client SDK); without it the dev server under test would call real production Firestore/Auth using `.env.local`'s real credentials instead of the seeded emulator data.
+
+**Firestore rules tests (Vitest + `@firebase/rules-unit-testing`)** — exercises `firestore.rules` directly against the emulator, independent of the app. `visibility.rules.test.ts` proves which multi-document queries Firestore's rules engine can and can't allow under the submission-visibility toggle (see "Submission Visibility Toggle" above); `squadWrite.rules.test.ts` proves the write-side lock window, shape validation, and source-of-truth cross-check on `userSquads` (see "Write rules" under Firestore Collections above). Since `request.time` in rules is always the real server clock (no time-mocking hook, and the app's date override doesn't reach rules evaluation), tests simulate pre/post-toss by computing each squad's `matchTimestamp` relative to the real `Date.now()` rather than mocking time itself:
+
+```bash
+npm run test:rules   # boots the Firestore emulator for the duration of the run, no separate `npm run emulators` needed
+```
+
+`rules-tests/*.rules.test.ts` files run in a Node environment (`vitest.rules.config.ts`), separate from the jsdom-based `vitest.config.ts` used for `npm run test`.
 
 ## Deploying
 
@@ -406,7 +436,6 @@ Both require being logged in (`vercel login`, `firebase login`) — see each CLI
 
 # Known Limitations / Not Yet Built
 
-* **30-minute pre-toss lock is UI-only** — not enforced by Firestore rules or a server check. A determined client could bypass it. Low risk for a private friend-group app, but worth knowing.
 * **Scoring accuracy depends on Cricbuzz's own data quality**, not just this codebase — see the fielding-name-mismatch and dot-ball caveats under Scoring Engine above. Treat computed scores as "very likely correct, not cryptographically guaranteed."
 * **No automatic trigger for scoring** — an admin has to click "Finalize Match" once Cricbuzz reports a match complete. Deliberate: this app has no cron/background job infrastructure by design, and reliably auto-detecting "truly finished, not just rain-delayed" was judged not worth the complexity versus a manual click.
 * Player `price` has no real pricing model (randomized at sync time).

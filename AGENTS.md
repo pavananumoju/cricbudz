@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Project
 
@@ -21,7 +21,6 @@ npm run test          # unit/component tests (Vitest + RTL)
 npm run test:watch    # watch mode
 npm run emulators      # start Firebase Auth+Firestore emulators (needs Java 21+; keep running)
 npm run test:e2e       # Playwright E2E, against the emulator — needs `npm run emulators` running first
-npm run test:rules      # firestore.rules tests (Vitest + @firebase/rules-unit-testing); boots its own emulator
 ```
 
 ## Environment variables (`.env.local`)
@@ -43,9 +42,7 @@ Client-side Firebase config comes from `src/firebase-applet-config.json`, not en
 
 **Data flow / ETL.** `GET /api/sync` (`src/app/api/sync/route.ts`, admin-only) is the only path that populates `matches` and `players` in Firestore. It calls Cricbuzz via `src/lib/rapidapi.ts`, using `CRICKET_CONFIG.IPL_SERIES_ID`/`IPL_SEASON` from `src/config/cricket.ts` as the single place to roll over to a new IPL season. Player `price` is currently randomized (`8 + Math.random() * 3`) — there's no real pricing model yet. If a team's player-list response comes back missing/reshaped, sync no longer silently skips it — it collects the team into a `teamsWithNoPlayers` list and returns a `warning` string, surfaced as a toast on the dashboard.
 
-**Admin API auth.** Every admin-only route (`/api/sync`, `/api/finalize-match`, `/api/admin/users`, `/api/admin/backup`) shares one auth check: `requireAdmin(req)` in `src/lib/adminAuth.ts` — verifies the Bearer ID token and the `admin` custom claim, returning either `{ uid }` or `{ error: NextResponse }`. Don't duplicate this check inline in a new route; import and call it instead. The same file also exports `requireAuth(req)` — same Bearer-token check, no admin-claim requirement — for routes any signed-in user can call (`/api/leaderboard`, `/api/matches/[matchId]/squads`).
-
-**Visibility toggle enforcement spans rules + two API routes, not rules alone.** `firestore.rules` enforces the `settings/visibility` policy correctly for single-document reads (a user's own squad), but Firestore's rules engine can't *prove* it for multi-document `list` queries — the leaderboard's `matchDay` range query, and Squad Room's cross-user query for a match on the toggle's own day, are both structurally unprovable and get rejected outright regardless of whether the underlying data should be visible (confirmed empirically in `rules-tests/`, run via `npm run test:rules`). `GET /api/leaderboard` and `GET /api/matches/[matchId]/squads` (both `requireAuth`, Admin SDK) reimplement the same policy in code instead. See README.md's "Submission Visibility Toggle" section for the full reasoning — read it before touching visibility-related queries or rules.
+**Admin API auth.** Every admin-only route (`/api/sync`, `/api/finalize-match`, `/api/admin/users`, `/api/admin/backup`) shares one auth check: `requireAdmin(req)` in `src/lib/adminAuth.ts` — verifies the Bearer ID token and the `admin` custom claim, returning either `{ uid }` or `{ error: NextResponse }`. Don't duplicate this check inline in a new route; import and call it instead.
 
 **RapidAPI shape validation (fail loudly).** `src/lib/scoring.ts` validates the Cricbuzz scorecard response against a Zod schema (`ScorecardResponseSchema`, `.passthrough()` so new fields don't break it) via `validateScorecardResponse()`, called in `/api/finalize-match` right after fetching the scorecard and before parsing it. If a field the scoring engine depends on is missing or retyped, this throws a specific error (naming the field) and the route returns HTTP 502 — deliberately refusing to compute scores rather than risk silently producing wrong points. If you see this error in practice, Cricbuzz's response shape changed; update the schema (and `parseScorecard`) to match the new shape.
 
