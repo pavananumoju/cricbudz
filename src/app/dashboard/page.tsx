@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
+import { cn, getTeamLogo, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
 import { getUserSquads, getMatches, deleteUserSquad } from '@/services/dataService';
 import { UserSquad, Match } from '@/types';
 import { useDev } from '@/context/DevContext';
@@ -181,12 +181,11 @@ export default function Dashboard() {
   const effectiveNow = getEffectiveNow();
   const nowTime = effectiveNow.getTime();
 
-  const effectiveDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(effectiveNow);
+  const effectiveDateStr = getMatchDayIST(effectiveNow);
   const todaysMatches = allMatches
     .filter((m) => {
       if (!m.date) return false;
-      const matchDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(m.date));
-      return matchDateStr === effectiveDateStr;
+      return getMatchDayIST(m.date) === effectiveDateStr;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 

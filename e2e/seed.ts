@@ -43,8 +43,20 @@ export async function runSeed() {
   }
 
   const now = Date.now();
-  const openMatchDate = new Date(now + 6 * 60 * 60 * 1000).toISOString(); // 6h out — open for drafting
-  const lockedMatchDate = new Date(now - 60 * 60 * 1000).toISOString(); // started 1h ago — locked
+
+  // The app derives "today" from IST (see CLAUDE.md item #8), not the
+  // machine's wall-clock day, so a naive "+6h"/"-1h" offset can silently
+  // land on the other side of the IST midnight boundary depending on what
+  // real time of day the suite happens to run — exactly the class of bug
+  // this item fixes. Clamp both to stay within *today's* IST calendar day
+  // (falling back to a narrower but still open/locked buffer right at the
+  // IST midnight edge) so visibility-toggle tests that assert "today" stay
+  // deterministic regardless of run time.
+  const todayIST = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(now));
+  const istDayStart = new Date(`${todayIST}T00:00:00+05:30`).getTime();
+  const istDayEnd = new Date(`${todayIST}T23:59:00+05:30`).getTime();
+  const openMatchDate = new Date(Math.max(Math.min(now + 6 * 60 * 60 * 1000, istDayEnd), now + 35 * 60 * 1000)).toISOString();
+  const lockedMatchDate = new Date(Math.min(Math.max(now - 60 * 60 * 1000, istDayStart), now - 35 * 60 * 1000)).toISOString();
 
   await db.collection('matches').doc(TEST_MATCH_ID).set({
     id: TEST_MATCH_ID,

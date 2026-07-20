@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getWeekRange, shiftWeek, computeStandings, getWeekNumber } from './leaderboard';
+import { getWeekRange, shiftWeek, formatWeekLabel, computeStandings, getWeekNumber } from './leaderboard';
 import { UserSquad } from '@/types';
 
 function mkSquad(overrides: Partial<UserSquad>): UserSquad {
@@ -43,6 +43,27 @@ describe('getWeekRange', () => {
     expect(range.startDay).toBe('2026-04-27');
     expect(range.endDay).toBe('2026-05-03');
   });
+
+  it('assigns a late-Sunday-UTC match to the following IST week (Monday), not the UTC week', () => {
+    // 19:00 UTC Sunday Apr 19 = 00:30 IST Monday Apr 20 — the exact
+    // "traveler abroad" divergence item #8 flags: a UTC-based week
+    // calculation would put this match in the Apr 13-19 week instead.
+    const range = getWeekRange(new Date('2026-04-19T19:00:00.000Z'));
+    expect(range.startDay).toBe('2026-04-20');
+    expect(range.endDay).toBe('2026-04-26');
+  });
+
+  it('computes the same IST week regardless of the machine/browser local timezone', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      const range = getWeekRange(new Date('2026-04-19T19:00:00.000Z'));
+      expect(range.startDay).toBe('2026-04-20');
+      expect(range.endDay).toBe('2026-04-26');
+    } finally {
+      process.env.TZ = original;
+    }
+  });
 });
 
 describe('shiftWeek', () => {
@@ -58,6 +79,19 @@ describe('shiftWeek', () => {
     const prev = shiftWeek(current, -1);
     expect(prev.startDay).toBe('2026-04-06');
     expect(prev.endDay).toBe('2026-04-12');
+  });
+});
+
+describe('formatWeekLabel', () => {
+  it('labels the IST week boundaries regardless of the machine local timezone', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      const range = getWeekRange(new Date('2026-04-15T10:00:00.000Z'));
+      expect(formatWeekLabel(range)).toBe('Apr 13 – Apr 19, 2026');
+    } finally {
+      process.env.TZ = original;
+    }
   });
 });
 

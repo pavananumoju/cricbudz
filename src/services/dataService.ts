@@ -128,6 +128,16 @@ export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt
   const squadId = `${user.uid}_${squad.matchId}`;
   await setDoc(doc(db, 'userSquads', squadId), {
     ...squad,
+    // Left as a UTC-day slice, NOT getMatchDayIST(): firestore.rules'
+    // matchesSourceOfTruth() enforces matchDay as a literal prefix of
+    // matchTimestamp (a full ISO/UTC string) via regex, and rules has no
+    // timezone-aware date function to check an IST day instead. Safe in
+    // practice — IPL matches only ever start at 10:00 or 14:00 UTC
+    // (15:30/19:30 IST), so this UTC slice always equals the IST day for
+    // real match data (verified against all synced matches) — but an
+    // arbitrary UTC timestamp late in the evening would diverge, so don't
+    // swap this specific derivation for getMatchDayIST() without also
+    // updating the rule.
     matchDay: squad.matchTimestamp.slice(0, 10),
     userId: user.uid,
     userDisplayName: user.displayName || null,

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { requireAuth } from '@/lib/adminAuth';
-import { getMatchTimeStatus } from '@/lib/utils';
+import { getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
 import { Match, UserSquad, VisibilitySettings } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ matchId:
   const match = matchSnap.data() as Match;
   const visibility = visibilitySnap.exists ? (visibilitySnap.data() as VisibilitySettings) : null;
 
-  const matchDay = match.date.slice(0, 10);
+  const matchDay = getMatchDayIST(match.date);
   const tossPassed = getMatchTimeStatus(match.date) !== 'open';
   const dayIsHidden = !!visibility?.hideUntilToss && visibility.date === matchDay;
 

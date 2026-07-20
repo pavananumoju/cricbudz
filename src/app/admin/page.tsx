@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { getVisibilitySettings, setVisibilitySettings } from '@/services/dataService';
-import { cn } from '@/lib/utils';
+import { cn, getMatchDayIST } from '@/lib/utils';
 
 interface AdminUser {
   uid: string;
@@ -45,7 +45,7 @@ export default function AdminPage() {
     if (!isAdmin) return;
     getVisibilitySettings().then((settings) => {
       setVisEnabled(settings?.hideUntilToss ?? false);
-      setVisDate(settings?.date || getEffectiveNow().toISOString().slice(0, 10));
+      setVisDate(settings?.date || getMatchDayIST(getEffectiveNow()));
       setVisLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,10 +140,18 @@ export default function AdminPage() {
   };
 
   const handleSaveVisibility = async () => {
+    if (visEnabled && !visDate) {
+      toast.error('Pick a date before enabling the toggle.');
+      return;
+    }
     setVisSaving(true);
     try {
       await setVisibilitySettings({ hideUntilToss: visEnabled, date: visDate });
-      toast.success('Visibility settings saved.');
+      toast.success(
+        visEnabled
+          ? `Armed: trios hidden until toss for ${visDate} (IST).`
+          : 'Visibility toggle turned off.'
+      );
     } catch (error) {
       console.error(error);
       toast.error('Failed to save visibility settings.');
@@ -153,18 +161,8 @@ export default function AdminPage() {
   };
 
   const handleSave = () => {
-    if (!inputValue) {
-      setDateOverride(null);
-      router.push('/dashboard');
-    } else {
-      const regex = /^\d{4}-\d{2}-\d{2}$/;
-      if (regex.test(inputValue)) {
-        setDateOverride(inputValue);
-        router.push('/dashboard');
-      } else {
-        alert('Please use YYYY-MM-DD format');
-      }
-    }
+    setDateOverride(inputValue || null);
+    router.push('/dashboard');
   };
 
   const handleClear = () => {
@@ -192,13 +190,12 @@ export default function AdminPage() {
           </div>
 
           <label htmlFor="date-override" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
-            Override Date (YYYY-MM-DD)
+            Override Date
           </label>
           <div className="flex gap-2 mb-4">
             <input
               id="date-override"
-              type="text"
-              placeholder="e.g. 2026-05-17"
+              type="date"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="flex-1 min-w-0 bg-surface-hover border border-border rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"
@@ -259,13 +256,12 @@ export default function AdminPage() {
               </button>
 
               <label htmlFor="vis-date" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
-                Applies to (YYYY-MM-DD)
+                Applies to (IST calendar day)
               </label>
               <div className="flex gap-2 mb-4">
                 <input
                   id="vis-date"
-                  type="text"
-                  placeholder="e.g. 2026-04-18"
+                  type="date"
                   value={visDate}
                   onChange={(e) => setVisDate(e.target.value)}
                   className="flex-1 min-w-0 bg-surface-hover border border-border rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary/50 transition-colors"

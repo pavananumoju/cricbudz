@@ -21,6 +21,17 @@ export function getMatchTimeStatus(matchDate: string | Date, now: Date = new Dat
   return 'open';
 }
 
+// Canonical "what calendar day is this" for the whole app — India Standard
+// Time, the league's actual timezone, rather than UTC or the viewer's
+// device timezone. Before this, matchDay (dataService), the dashboard's
+// "Today's Arena", fixtures' auto-scroll, and the visibility toggle's match
+// day each derived "today" differently (UTC slice, UTC Intl format, device
+// local time), which agree by coincidence for IPL's evening start times but
+// can disagree for a user traveling abroad or a typo'd admin date.
+export function getMatchDayIST(input: string | Date | number): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(input));
+}
+
 export function getTeamLogo(teamCode: string, logoId?: number): string {
   if (logoId) {
     return `https://static.cricbuzz.com/a/img/v1/72x72/i1/c${logoId}/team.jpg`;

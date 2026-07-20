@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cn, getMatchTimeStatus, getTeamLogo, SQUAD_LOCK_WINDOW_MS, ASSUMED_MATCH_DURATION_MS } from './utils';
+import { cn, getMatchTimeStatus, getTeamLogo, getMatchDayIST, SQUAD_LOCK_WINDOW_MS, ASSUMED_MATCH_DURATION_MS } from './utils';
 
 describe('cn', () => {
   it('merges class names and resolves Tailwind conflicts', () => {
@@ -50,6 +50,31 @@ describe('getMatchTimeStatus', () => {
 
   it('accepts an ISO string as well as a Date', () => {
     expect(getMatchTimeStatus(matchStart.toISOString(), new Date(matchStart.getTime() - 60 * 60 * 1000))).toBe('open');
+  });
+});
+
+describe('getMatchDayIST', () => {
+  it('returns the same calendar day for a typical IPL evening start (14:00 UTC = 19:30 IST)', () => {
+    expect(getMatchDayIST('2026-04-15T14:00:00.000Z')).toBe('2026-04-15');
+  });
+
+  it('returns the same calendar day for a typical IPL afternoon start (10:00 UTC = 15:30 IST)', () => {
+    expect(getMatchDayIST('2026-04-15T10:00:00.000Z')).toBe('2026-04-15');
+  });
+
+  it('rolls over to the next IST calendar day for a late-UTC-evening timestamp', () => {
+    // 19:00 UTC Sunday = 00:30 IST Monday.
+    expect(getMatchDayIST('2026-04-19T19:00:00.000Z')).toBe('2026-04-20');
+  });
+
+  it('is independent of the machine local timezone (accepts a Date too)', () => {
+    const original = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      expect(getMatchDayIST(new Date('2026-04-19T19:00:00.000Z'))).toBe('2026-04-20');
+    } finally {
+      process.env.TZ = original;
+    }
   });
 });
 

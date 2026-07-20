@@ -6,7 +6,7 @@ import { getMatches } from '@/services/dataService';
 import { Match } from '@/types';
 import Link from 'next/link';
 import { Trophy, Zap, MapPin, Calendar, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
-import { cn, getTeamLogo, getMatchTimeStatus } from '@/lib/utils';
+import { cn, getTeamLogo, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -72,8 +72,8 @@ export default function MatchesPage() {
     currentMatchRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
   }, [loading, matches]);
 
-  const todayStr = getEffectiveNow().toISOString().slice(0, 10);
-  const currentMatchIndex = matches.findIndex((m) => !!m.date && m.date.slice(0, 10) >= todayStr);
+  const todayStr = getMatchDayIST(getEffectiveNow());
+  const currentMatchIndex = matches.findIndex((m) => !!m.date && getMatchDayIST(m.date) >= todayStr);
 
   if (loading) {
     return (

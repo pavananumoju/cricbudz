@@ -15,7 +15,7 @@ import {
   getVisibilitySettings,
 } from '@/services/dataService';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
-import { cn, getMatchTimeStatus } from '@/lib/utils';
+import { cn, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
 import { SQUAD_TARGET_SIZE, checkDualFranchiseViolation, validateSquad } from '@/lib/draftRules';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
@@ -164,7 +164,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   // Toss = the moment "locked" begins. Once locked, the toggle no longer
   // matters — everyone can see everyone's trio for this match.
   const visibilityHiddenToday =
-    !!visibilitySettings?.hideUntilToss && match && visibilitySettings.date === match.date.slice(0, 10);
+    !!visibilitySettings?.hideUntilToss && match && visibilitySettings.date === getMatchDayIST(match.date);
   const othersHidden = !!visibilityHiddenToday && !isLocked;
 
   const selectPlayer = (player: Player) => {

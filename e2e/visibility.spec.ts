@@ -31,7 +31,11 @@ async function setVisibilityToggle(adminPage: Page, enabled: boolean) {
   const dateInput = adminPage.getByLabel(/applies to/i);
   await expect(dateInput).toBeVisible();
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The app derives "today" from IST (item #8), not UTC or the machine's
+  // local timezone — match this here, or a match a few hours out can land
+  // on the other side of a UTC/IST day boundary and the toggle silently
+  // targets the wrong day.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   await dateInput.fill(today);
 
   // The toggle's current on/off state isn't independently queryable from
@@ -43,7 +47,9 @@ async function setVisibilityToggle(adminPage: Page, enabled: boolean) {
     await toggleButton.click();
   }
   await adminPage.getByRole('button', { name: /save visibility settings/i }).click();
-  await expect(adminPage.getByText(/visibility settings saved/i)).toBeVisible({ timeout: 10000 });
+  await expect(adminPage.getByText(enabled ? /armed: trios hidden until toss/i : /visibility toggle turned off/i)).toBeVisible({
+    timeout: 10000,
+  });
 }
 
 test('visibility toggle hides trios pre-toss, and turning it off reveals them', async ({ browser }) => {
