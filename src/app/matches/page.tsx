@@ -11,6 +11,8 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useDev } from '@/context/DevContext';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { isPermissionDeniedError } from '@/lib/errors';
 
 const VENUES: Record<string, { city: string; stadium: string }> = {
   'Eden Gardens': { city: 'Kolkata', stadium: 'Eden Gardens' },
@@ -37,17 +39,31 @@ function getVenueDetails(venue: string | undefined | null) {
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const { getEffectiveNow } = useDev();
   const currentMatchRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const fetchMatches = async () => {
-      const data = await getMatches();
-      setMatches(data);
-      setLoading(false);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getMatches()
+      .then((data) => {
+        if (cancelled) return;
+        setMatches(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
-    fetchMatches();
-  }, []);
+  }, [retryToken]);
 
   // Land the user on today's fixtures (or the next upcoming one) instead of
   // making them scroll down from the oldest match every time.
@@ -83,7 +99,12 @@ export default function MatchesPage() {
         <p className="text-sm text-muted font-medium">Pick a match, build your 3-player trio, name your MVP.</p>
       </header>
 
-      {matches.length === 0 ? (
+      {error ? (
+        <ErrorState
+          permissionDenied={isPermissionDeniedError(error)}
+          onRetry={() => setRetryToken((t) => t + 1)}
+        />
+      ) : matches.length === 0 ? (
         <Card className="text-center py-16 border-dashed">
           <Trophy className="w-10 h-10 text-muted/40 mx-auto mb-3" />
           <h3 className="text-base font-display font-black uppercase italic text-muted mb-1">The Stadium is Quiet</h3>

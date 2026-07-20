@@ -22,6 +22,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Sheet } from '@/components/ui/Sheet';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { isPermissionDeniedError } from '@/lib/errors';
 
 import PlayerCard from './_components/PlayerCard';
 import SelectedSlots from './_components/SelectedSlots';
@@ -70,9 +72,14 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [mvpId, setMvpId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<unknown>(null);
+  const [pageRetryToken, setPageRetryToken] = useState(0);
   const [saving, setSaving] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [otherSquads, setOtherSquads] = useState<UserSquad[]>([]);
+  const [squadRoomLoading, setSquadRoomLoading] = useState(true);
+  const [squadRoomError, setSquadRoomError] = useState<unknown>(null);
+  const [squadRoomRetryToken, setSquadRoomRetryToken] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [visibilityHiddenToday, setVisibilityHiddenToday] = useState(false);
   const [motmSelection, setMotmSelection] = useState('');
@@ -86,35 +93,68 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     const fetchData = async () => {
-      const [matchData, allUserSquads] = await Promise.all([getMatchById(id), getUserSquads()]);
+      setLoading(true);
+      setPageError(null);
+      try {
+        const [matchData, allUserSquads] = await Promise.all([getMatchById(id), getUserSquads()]);
+        if (cancelled) return;
 
-      if (matchData) {
-        setMatch(matchData);
-        setMotmSelection(matchData.scoring?.motmPlayerId ?? '');
-        const playersByTeams = await getPlayersByTeams(matchData.team1, matchData.team2);
-        const t1 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team1.toUpperCase());
-        const t2 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team2.toUpperCase());
-        setTeam1Players(t1);
-        setTeam2Players(t2);
-        setAllPlayers(playersByTeams);
+        if (matchData) {
+          setMatch(matchData);
+          setMotmSelection(matchData.scoring?.motmPlayerId ?? '');
+          const playersByTeams = await getPlayersByTeams(matchData.team1, matchData.team2);
+          if (cancelled) return;
+          const t1 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team1.toUpperCase());
+          const t2 = playersByTeams.filter((p) => p.team.toUpperCase() === matchData.team2.toUpperCase());
+          setTeam1Players(t1);
+          setTeam2Players(t2);
+          setAllPlayers(playersByTeams);
 
-        const existingSquad = allUserSquads.find((s) => s.matchId === id);
-        if (existingSquad) {
-          const selected = playersByTeams.filter((p) => existingSquad.players.includes(p.id));
-          setSelectedPlayers(selected);
-          setMvpId(existingSquad.mvpId);
+          const existingSquad = allUserSquads.find((s) => s.matchId === id);
+          if (existingSquad) {
+            const selected = playersByTeams.filter((p) => existingSquad.players.includes(p.id));
+            setSelectedPlayers(selected);
+            setMvpId(existingSquad.mvpId);
+          }
         }
-
-        const [squadsForMatch, visibility] = await Promise.all([getSquadsForMatch(id), getVisibilitySettings()]);
-        setOtherSquads(squadsForMatch.filter((s) => s.userId !== user?.uid));
-        const matchDay = matchData.date.slice(0, 10);
-        setVisibilityHiddenToday(!!visibility?.hideUntilToss && visibility.date === matchDay);
+      } catch (err) {
+        if (!cancelled) setPageError(err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     };
     fetchData();
-  }, [id, user?.uid]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, pageRetryToken]);
+
+  // Squad Room is fetched separately from the main match/players data above
+  // so a failure here (or a retry) doesn't block the rest of the draft page.
+  useEffect(() => {
+    if (!id || !match) return;
+    let cancelled = false;
+    setSquadRoomLoading(true);
+    setSquadRoomError(null);
+    Promise.all([getSquadsForMatch(id), getVisibilitySettings()])
+      .then(([squadsForMatch, visibility]) => {
+        if (cancelled) return;
+        setOtherSquads(squadsForMatch.filter((s) => s.userId !== user?.uid));
+        const matchDay = match.date.slice(0, 10);
+        setVisibilityHiddenToday(!!visibility?.hideUntilToss && visibility.date === matchDay);
+      })
+      .catch((err) => {
+        if (!cancelled) setSquadRoomError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setSquadRoomLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, match, user?.uid, squadRoomRetryToken]);
 
   const timeStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
   const isCompleted = timeStatus === 'completed';
@@ -216,6 +256,18 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (pageError) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center px-6">
+        <ErrorState
+          permissionDenied={isPermissionDeniedError(pageError)}
+          onRetry={() => setPageRetryToken((t) => t + 1)}
+          className="max-w-sm"
+        />
       </div>
     );
   }
@@ -441,7 +493,16 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
             <h3 className="font-display font-black text-sm uppercase italic tracking-tight">Squad Room</h3>
           </div>
 
-          {othersHidden ? (
+          {squadRoomLoading ? (
+            <Card className="p-5 text-center border-dashed">
+              <p className="text-xs text-muted">Loading Squad Room...</p>
+            </Card>
+          ) : squadRoomError ? (
+            <ErrorState
+              permissionDenied={isPermissionDeniedError(squadRoomError)}
+              onRetry={() => setSquadRoomRetryToken((t) => t + 1)}
+            />
+          ) : othersHidden ? (
             <Card className="p-5 flex items-center gap-3 border-dashed">
               <EyeOff size={16} className="text-muted shrink-0" />
               <p className="text-xs text-muted leading-relaxed">

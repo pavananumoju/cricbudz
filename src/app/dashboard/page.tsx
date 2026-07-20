@@ -23,6 +23,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { isPermissionDeniedError } from '@/lib/errors';
 
 export default function Dashboard() {
   const { getEffectiveNow } = useDev();
@@ -32,6 +34,8 @@ export default function Dashboard() {
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -87,6 +91,7 @@ export default function Dashboard() {
         return;
       }
 
+      setError(null);
       try {
         const [userSquads, fetchedMatches, allPlayers] = await Promise.all([
           getUserSquads(),
@@ -110,14 +115,14 @@ export default function Dashboard() {
 
         setSquads(enrichedSquads);
       } catch (err) {
-        console.error('Failed to fetch data:', err);
+        setError(err);
       } finally {
         setLoading(false);
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, retryToken]);
 
   const getMatchLabel = (match: Match) => {
     const d = new Date(match.date);
@@ -161,6 +166,17 @@ export default function Dashboard() {
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-52 w-full rounded-3xl" />
         <Skeleton className="h-52 w-full rounded-3xl" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 pt-2">
+        <ErrorState
+          permissionDenied={isPermissionDeniedError(error)}
+          onRetry={() => setRetryToken((t) => t + 1)}
+        />
       </div>
     );
   }

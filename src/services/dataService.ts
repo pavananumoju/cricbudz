@@ -14,167 +14,119 @@ import {
 import { db, auth } from '@/lib/firebase';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
 import { CRICKET_CONFIG } from '@/config/cricket';
+import { ApiError } from '@/lib/errors';
 
 // The season's first synced match's date — used to number leaderboard
 // weeks ("Week 1", "Week 2", ...) relative to when the season actually
 // started, rather than an arbitrary ISO calendar week number. Scoped to
 // the current series so a past season's matches don't push "Week 1" back.
+//
+// Errors propagate to the caller instead of being swallowed here — a
+// permission/network failure must be visibly distinguishable from "no
+// matches synced yet" (an empty snapshot, which legitimately returns null).
 export async function getEarliestMatchDate(): Promise<string | null> {
-  try {
-    const q = query(
-      collection(db, 'matches'),
-      where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
-      orderBy('date', 'asc'),
-      limit(1)
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    return (snap.docs[0].data() as Match).date;
-  } catch (err) {
-    console.error('getEarliestMatchDate error:', err);
-    return null;
-  }
+  const q = query(
+    collection(db, 'matches'),
+    where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
+    orderBy('date', 'asc'),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return (snap.docs[0].data() as Match).date;
 }
 
 // Scoped to the current series (CRICKET_CONFIG.IPL_SERIES_ID) so fixtures
 // from a past season synced earlier don't leak into the current one's
 // match list/leaderboard week count.
 export async function getMatches(): Promise<Match[]> {
-  try {
-    const q = query(
-      collection(db, 'matches'),
-      where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
-      orderBy('date', 'asc')
-    );
+  const q = query(
+    collection(db, 'matches'),
+    where('seriesId', '==', CRICKET_CONFIG.IPL_SERIES_ID),
+    orderBy('date', 'asc')
+  );
 
-    const snap = await getDocs(q);
+  const snap = await getDocs(q);
 
-    const matches = snap.docs.map(
-      d => d.data() as Match
-    );
-
-    console.log(
-      `Fetched ${matches.length} matches`
-    );
-
-    return matches;
-  } catch (err) {
-    console.error(
-      'getMatches error:',
-      err
-    );
-
-    return [];
-  }
+  return snap.docs.map(
+    d => d.data() as Match
+  );
 }
 
 export async function getMatchById(
   id: string
 ): Promise<Match | undefined> {
-  try {
-    const snap = await getDoc(
-      doc(db, 'matches', id)
-    );
+  const snap = await getDoc(
+    doc(db, 'matches', id)
+  );
 
-    if (snap.exists()) {
-      return snap.data() as Match;
-    }
-
-    return undefined;
-  } catch (err) {
-    console.error(
-      'getMatchById error:',
-      err
-    );
-
-    return undefined;
+  if (snap.exists()) {
+    return snap.data() as Match;
   }
+
+  return undefined;
 }
 
 export async function getPlayers(): Promise<Player[]> {
-  try {
-    const snap = await getDocs(collection(db, 'players'));
-    return snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    } as Player));
-  } catch (err) {
-    console.error('getPlayers error:', err);
-    return [];
-  }
+  const snap = await getDocs(collection(db, 'players'));
+  return snap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  } as Player));
 }
 
 export async function getPlayersByTeams(
   team1: string,
   team2: string
 ): Promise<Player[]> {
-  try {
-    console.log(
-      `Fetching players for teams: ${team1}, ${team2}`
-    );
+  // Exact team short name match (RCB, MI, CSK etc.)
+  const q1 = query(
+    collection(db, 'players'),
+    where('team', '==', team1)
+  );
 
-    // Exact team short name match (RCB, MI, CSK etc.)
-    const q1 = query(
-      collection(db, 'players'),
-      where('team', '==', team1)
-    );
+  const q2 = query(
+    collection(db, 'players'),
+    where('team', '==', team2)
+  );
 
-    const q2 = query(
-      collection(db, 'players'),
-      where('team', '==', team2)
-    );
+  const [s1, s2] = await Promise.all([
+    getDocs(q1),
+    getDocs(q2),
+  ]);
 
-    const [s1, s2] = await Promise.all([
-      getDocs(q1),
-      getDocs(q2),
-    ]);
-
-    const players = [
-      ...s1.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          name: data.name || '',
-          team: data.team || '',
-          teamId: data.teamId,
-          role: data.role || '',
-          price: data.price || 0,
-          imageId: data.imageId,
-          battingStyle: data.battingStyle,
-          bowlingStyle: data.bowlingStyle,
-          points: data.points
-        } as Player;
-      }),
-      ...s2.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          name: data.name || '',
-          team: data.team || '',
-          teamId: data.teamId,
-          role: data.role || '',
-          price: data.price || 0,
-          imageId: data.imageId,
-          battingStyle: data.battingStyle,
-          bowlingStyle: data.bowlingStyle,
-          points: data.points
-        } as Player;
-      }),
-    ];
-
-    console.log(
-      `Fetched ${players.length} players`
-    );
-
-    return players;
-  } catch (err) {
-    console.error(
-      'getPlayersByTeams error:',
-      err
-    );
-
-    return [];
-  }
+  return [
+    ...s1.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        name: data.name || '',
+        team: data.team || '',
+        teamId: data.teamId,
+        role: data.role || '',
+        price: data.price || 0,
+        imageId: data.imageId,
+        battingStyle: data.battingStyle,
+        bowlingStyle: data.bowlingStyle,
+        points: data.points
+      } as Player;
+    }),
+    ...s2.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        name: data.name || '',
+        team: data.team || '',
+        teamId: data.teamId,
+        role: data.role || '',
+        price: data.price || 0,
+        imageId: data.imageId,
+        battingStyle: data.battingStyle,
+        bowlingStyle: data.bowlingStyle,
+        points: data.points
+      } as Player;
+    }),
+  ];
 }
 
 export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt' | 'matchDay' | 'userDisplayName' | 'userPhotoURL'>) {
@@ -201,17 +153,12 @@ export async function deleteUserSquad(matchId: string) {
 }
 
 export async function getUserSquads(): Promise<UserSquad[]> {
-  try {
-    const userId = auth.currentUser?.uid;
-    if (!userId) return [];
+  const userId = auth.currentUser?.uid;
+  if (!userId) return [];
 
-    const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => d.data() as UserSquad);
-  } catch (err) {
-    console.error('getUserSquads error:', err);
-    return [];
-  }
+  const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data() as UserSquad);
 }
 
 // Returns every user's squad for a match, filtered by the same visibility
@@ -225,20 +172,15 @@ export async function getUserSquads(): Promise<UserSquad[]> {
 // and rules-tests/ for the full reasoning). The route reimplements the
 // same policy in code, using the real match doc and the server clock.
 export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
-  try {
-    const user = auth.currentUser;
-    if (!user) return [];
-    const token = await user.getIdToken();
-    const res = await fetch(`/api/matches/${matchId}/squads`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`GET /api/matches/${matchId}/squads failed: ${res.status}`);
-    const data = (await res.json()) as { squads: UserSquad[] };
-    return data.squads;
-  } catch (err) {
-    console.error('getSquadsForMatch error:', err);
-    return [];
-  }
+  const user = auth.currentUser;
+  if (!user) return [];
+  const token = await user.getIdToken();
+  const res = await fetch(`/api/matches/${matchId}/squads`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new ApiError(`GET /api/matches/${matchId}/squads failed: ${res.status}`, res.status);
+  const data = (await res.json()) as { squads: UserSquad[] };
+  return data.squads;
 }
 
 // Every scored squad whose matchDay falls within [startDay, endDay]
@@ -250,30 +192,20 @@ export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
 // rejected outright on any day the toggle is on. See the route's comment
 // for how it applies the equivalent policy in code instead.
 export async function getSquadsInDateRange(startDay: string, endDay: string): Promise<UserSquad[]> {
-  try {
-    const user = auth.currentUser;
-    if (!user) return [];
-    const token = await user.getIdToken();
-    const res = await fetch(`/api/leaderboard?startDay=${startDay}&endDay=${endDay}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`GET /api/leaderboard failed: ${res.status}`);
-    const data = (await res.json()) as { squads: UserSquad[] };
-    return data.squads;
-  } catch (err) {
-    console.error('getSquadsInDateRange error:', err);
-    return [];
-  }
+  const user = auth.currentUser;
+  if (!user) return [];
+  const token = await user.getIdToken();
+  const res = await fetch(`/api/leaderboard?startDay=${startDay}&endDay=${endDay}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new ApiError(`GET /api/leaderboard failed: ${res.status}`, res.status);
+  const data = (await res.json()) as { squads: UserSquad[] };
+  return data.squads;
 }
 
 export async function getVisibilitySettings(): Promise<VisibilitySettings | null> {
-  try {
-    const snap = await getDoc(doc(db, 'settings', 'visibility'));
-    return snap.exists() ? (snap.data() as VisibilitySettings) : null;
-  } catch (err) {
-    console.error('getVisibilitySettings error:', err);
-    return null;
-  }
+  const snap = await getDoc(doc(db, 'settings', 'visibility'));
+  return snap.exists() ? (snap.data() as VisibilitySettings) : null;
 }
 
 export async function setVisibilitySettings(settings: VisibilitySettings) {

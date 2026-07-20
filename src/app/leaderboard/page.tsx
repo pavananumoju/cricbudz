@@ -18,6 +18,8 @@ import {
 } from '@/lib/leaderboard';
 import { getSquadsInDateRange, getEarliestMatchDate } from '@/services/dataService';
 import { useDev } from '@/context/DevContext';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { isPermissionDeniedError } from '@/lib/errors';
 
 const MEDAL_STYLES: Record<number, { badge: string; row: string }> = {
   1: { badge: 'bg-accent text-white shadow-sm shadow-accent/30', row: 'bg-accent-tint/60 border-accent/30' },
@@ -42,18 +44,37 @@ export default function LeaderboardPage() {
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
   const [seasonStart, setSeasonStart] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    getEarliestMatchDate().then((date) => setSeasonStart(date ? new Date(date) : null));
+    // Non-critical: only used to display "Week N" — a failure here
+    // shouldn't block the rest of the page, so it's logged, not surfaced.
+    getEarliestMatchDate()
+      .then((date) => setSeasonStart(date ? new Date(date) : null))
+      .catch((err) => console.error('getEarliestMatchDate failed:', err));
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    getSquadsInDateRange(weekRange.startDay, weekRange.endDay).then((squads) => {
-      setStandings(computeStandings(squads));
-      setLoading(false);
-    });
-  }, [weekRange.startDay, weekRange.endDay]);
+    setError(null);
+    getSquadsInDateRange(weekRange.startDay, weekRange.endDay)
+      .then((squads) => {
+        if (cancelled) return;
+        setStandings(computeStandings(squads));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [weekRange.startDay, weekRange.endDay, retryToken]);
 
   const currentWeek = getWeekRange(getEffectiveNow());
   const isCurrentWeek = weekRange.startDay === currentWeek.startDay;
@@ -112,6 +133,11 @@ export default function LeaderboardPage() {
             <Skeleton key={i} className="h-16 w-full rounded-2xl" />
           ))}
         </div>
+      ) : error ? (
+        <ErrorState
+          permissionDenied={isPermissionDeniedError(error)}
+          onRetry={() => setRetryToken((t) => t + 1)}
+        />
       ) : standings.length === 0 ? (
         <Card className="text-center py-16 border-dashed">
           <Trophy className="w-10 h-10 text-muted/40 mx-auto mb-3" />
