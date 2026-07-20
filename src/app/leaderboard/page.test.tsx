@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { FirebaseError } from 'firebase/app';
+import { ApiError } from '@/lib/errors';
 import LeaderboardPage from './page';
 
 vi.mock('@/context/DevContext', () => ({
@@ -27,8 +27,8 @@ describe('LeaderboardPage error handling', () => {
     expect(screen.queryByText('No Scores Yet')).not.toBeInTheDocument();
   });
 
-  it('shows distinct permission-denied copy for a Firestore permission-denied failure', async () => {
-    getSquadsInDateRange.mockRejectedValue(new FirebaseError('permission-denied', 'Missing or insufficient permissions.'));
+  it('shows distinct permission-denied copy for a 401 from GET /api/leaderboard (the actual failure shape this page can hit)', async () => {
+    getSquadsInDateRange.mockRejectedValue(new ApiError('GET /api/leaderboard failed: 401', 401));
     render(<LeaderboardPage />);
 
     await waitFor(() => expect(screen.getByText("Can't Access This")).toBeInTheDocument());

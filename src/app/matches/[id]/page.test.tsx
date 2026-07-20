@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { FirebaseError } from 'firebase/app';
+import { ApiError } from '@/lib/errors';
 import { Match } from '@/types';
 import SquadDraftPage from './page';
 
@@ -62,8 +63,8 @@ describe('SquadDraftPage — Squad Room error handling', () => {
     expect(screen.queryByText('No other trios submitted for this match yet.')).not.toBeInTheDocument();
   });
 
-  it('shows distinct permission-denied copy in Squad Room for a permission-denied failure', async () => {
-    getSquadsForMatch.mockRejectedValue(new FirebaseError('permission-denied', 'Missing or insufficient permissions.'));
+  it('shows distinct permission-denied copy in Squad Room for a 401 from GET /api/matches/[id]/squads (the actual failure shape this read can hit)', async () => {
+    getSquadsForMatch.mockRejectedValue(new ApiError('GET /api/matches/match-1/squads failed: 401', 401));
     render(<SquadDraftPage params={Promise.resolve({ id: 'match-1' })} />);
 
     await waitFor(() => expect(screen.getByText("Can't Access This")).toBeInTheDocument());
@@ -76,5 +77,14 @@ describe('SquadDraftPage — Squad Room error handling', () => {
 
     await waitFor(() => expect(screen.getByText('No other trios submitted for this match yet.')).toBeInTheDocument());
     expect(screen.queryByText("Couldn't Load")).not.toBeInTheDocument();
+  });
+
+  it('shows a page-level permission-denied state (not "Match Not Found") for a real Firestore permission-denied on the primary match read', async () => {
+    getMatchById.mockRejectedValue(new FirebaseError('permission-denied', 'Missing or insufficient permissions.'));
+    render(<SquadDraftPage params={Promise.resolve({ id: 'match-1' })} />);
+
+    await waitFor(() => expect(screen.getByText("Can't Access This")).toBeInTheDocument());
+    expect(screen.getByText("You don't have access to this right now.")).toBeInTheDocument();
+    expect(screen.queryByText('Match Not Found')).not.toBeInTheDocument();
   });
 });
