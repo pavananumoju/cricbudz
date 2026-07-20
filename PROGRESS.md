@@ -212,6 +212,20 @@ Full test matrix: 85 unit tests (2 new, dashboard rendering from `playerNames` i
 
 **Not deployed as part of this pass** — `firestore.rules` changed (`playerNames` shape check) and needs `firebase deploy --only firestore:rules`; app code needs `vercel --prod`; `scripts/backfill-squad-playernames.mjs` (prod) hasn't been run yet. All three pending explicit go-ahead.
 
+## "Squad save fails" / "can't edit players" bug report: not a code regression (2026-07-20)
+
+Reported as two bugs — mobile squad save failing with "Failed to save your squad", and desktop unable to edit players at all — with a strong prior suspicion that item #6's `playerNames` field wasn't allow-listed in item #2's rules shape validation. That theory was **disproven directly against live production**: fetched the actual live Firestore ruleset via the Rules API (`admin.securityRules()`) and it's byte-identical to local `firestore.rules`, already correctly requiring/allowing `playerNames`; the deployed Vercel JS bundle already sends it. `npm run test:rules` (29/29) and a full E2E draft-flow run (375px through 1366px) all pass cleanly against current code with no changes.
+
+**Real root cause:** the 2026 IPL season is fully over in production Firestore (74/74 matches `COMPLETE`, zero upcoming) — confirmed via a direct read-only Admin SDK check. Seeing *any* match as open/editable right now is only possible via the admin-only **Dev Control Center date override** (`localStorage['ipl_date_override']`, set from `/admin`, surfaced nowhere else). Reproduced both symptoms exactly by simulating a stale override on one device and none on another:
+
+* **Device with the override active:** client-side `getEffectiveNow()` treats a past match as still open — player selection, MVP tagging, and "Lock Trio" all work — but the save itself fails, because `hasTossPassed()` in `firestore.rules` checks `request.time` (the real server clock, which a client override can never spoof; this was already documented as a known limitation in `rules-tests/squadWrite.rules.test.ts`'s file header). This is exactly the "mobile: edits fine, fails to save" symptom.
+* **Device with no override:** the real clock correctly shows every match as locked/completed, so `PlayerCard`'s `disabled={isLocked}` is true from the start — exactly the "desktop: can't edit players at all" symptom.
+* Same mechanism explains the "delete icon missing on desktop" report — the dashboard's delete button has no responsive CSS at all (confirmed via grep, no `hidden`/`lg:hidden` near it); its visibility is gated by `canDelete = getMatchTimeStatus === 'open'`, the same override-dependent check. No CSS/responsive bug ever existed.
+
+**Fix:** not a rules or draft-flow change (both were already correct) — added `DevOverrideBanner` (`src/components/DevOverrideBanner.tsx`), rendered globally in `layout.tsx` above `NavigationWrapper` so it shows on every page including the chrome-less draft screen (`/matches/[id]` hides `TopBar`/`BottomNav` but not this). Renders nothing when no override is set; shows a persistent warning banner with a one-click "Clear" when one is active, so a forgotten override on one device is no longer invisible outside `/admin`. Verified manually in the emulator: hidden by default, visible on dashboard and draft page alike once an override is set, "Clear" removes it immediately.
+
+**Revisit if:** this pattern recurs even with the banner visible — would point to something in `hasTossPassed()`/`matchesSourceOfTruth()` itself rather than stale dev state.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)
