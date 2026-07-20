@@ -373,7 +373,7 @@ Note: `status` here is whatever Cricbuzz reported *at sync time* — it does not
 
 ## `players`
 
-Synced alongside matches, keyed by Cricbuzz player ID. `price` is currently randomized (`8 + Math.random() * 3`) — no real pricing model yet.
+Synced alongside matches, keyed by Cricbuzz player ID. `price` is randomized (`8 + Math.random() * 3`) once, the first time a player is seen — no real pricing model yet. Re-syncing never touches the `price` of a player that already has one, so prices don't shuffle on every "Sync Fixtures" click.
 
 ## `userSquads`
 

@@ -24,6 +24,8 @@ export async function GET(req: Request) {
     );
   }
 
+  const startedAt = Date.now();
+
   try {
     console.log('Fetching IPL 2026 schedule...');
     const data = await getIPLSeries();
@@ -132,131 +134,119 @@ export async function GET(req: Request) {
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+    // Accumulate every match doc write into as few batches as possible
+    // (Firestore caps a single batch at 500 operations) instead of one
+    // round-trip per match.
+    for (let i = 0; i < matchesToSync.length; i += 500) {
+      const chunk = matchesToSync.slice(i, i + 500);
+      const matchBatch = adminDb.batch();
+
+      for (const match of chunk) {
+        const t1Ident = match.team1Short || match.team1;
+        const t2Ident = match.team2Short || match.team2;
+
+        matchBatch.set(
+          adminDb.collection('matches').doc(match.id),
+          {
+            id: match.id,
+            seriesId: match.seriesId,
+            team1Id: match.team1Id,
+            team1LogoId: match.team1LogoId,
+            team2Id: match.team2Id,
+            team2LogoId: match.team2LogoId,
+            team1: t1Ident,
+            team2: t2Ident,
+            date: match.date,
+            venue: match.venue,
+            city: match.city,
+            status: match.status,
+            matchDesc: match.matchDesc,
+            seriesName: match.seriesName,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+        syncedMatchShortNames.push(`${t1Ident} vs ${t2Ident}`);
+      }
+
+      await matchBatch.commit();
+      console.log(`Committed ${chunk.length} matches`);
+    }
+
+    // Syncs one team's roster. Prices are only assigned to players seen for
+    // the first time — there's no real pricing model yet, but re-randomizing
+    // every existing player's price on every sync made prices look broken.
+    async function syncTeamPlayers(teamId: number, teamIdent: string) {
+      if (syncedTeams.has(teamId)) return;
+
+      console.log(`Fetching players for team ${teamId} (${teamIdent})`);
+      await sleep(1500); // Wait 1.5s to avoid rate limit
+      const teamPlayers = await getTeamPlayers(teamId);
+      console.log(`Players found for ${teamIdent}:`, teamPlayers?.player?.length || 0);
+
+      if (!teamPlayers || !teamPlayers.player) {
+        teamsWithNoPlayers.push(teamIdent);
+        return;
+      }
+
+      const playerIds: string[] = teamPlayers.player
+        .filter((p: any) => p.id)
+        .map((p: any) => p.id.toString());
+      const existingIds = new Set<string>();
+      if (playerIds.length > 0) {
+        const existingDocs = await adminDb.getAll(
+          ...playerIds.map(id => adminDb.collection('players').doc(id))
+        );
+        existingDocs.forEach(doc => {
+          if (doc.exists) existingIds.add(doc.id);
+        });
+      }
+
+      const playerBatch = adminDb.batch();
+      let role = 'PLAYER';
+
+      for (const p of teamPlayers.player) {
+        // Category sub-header parser validation
+        if (!p.id) {
+          role = p.name || 'PLAYER';
+          continue;
+        }
+
+        const playerId = p.id.toString();
+        const playerRef = adminDb.collection('players').doc(playerId);
+        const data: Record<string, unknown> = {
+          id: playerId,
+          name: p.name,
+          role,
+          teamId,
+          team: teamIdent, // Safely fallback on clean short name identifier
+          battingStyle: p.battingStyle || null,
+          bowlingStyle: p.bowlingStyle || null,
+          imageId: p.imageId || null,
+          updatedAt: new Date().toISOString(),
+        };
+        if (!existingIds.has(playerId)) {
+          data.price = 8 + Math.random() * 3;
+        }
+        playerBatch.set(playerRef, data, { merge: true });
+      }
+
+      await playerBatch.commit();
+      syncedTeams.add(teamId);
+      console.log(`Synced players for ${teamIdent}`);
+    }
+
     for (const match of matchesToSync) {
       console.log(`Syncing ${match.matchDesc}: ${match.team1} vs ${match.team2}`);
-
-      const batch = adminDb.batch();
-      const matchRef = adminDb.collection('matches').doc(match.id);
 
       const t1Ident = match.team1Short || match.team1;
       const t2Ident = match.team2Short || match.team2;
 
-      batch.set(
-        matchRef,
-        {
-          id: match.id,
-          seriesId: match.seriesId,
-          team1Id: match.team1Id,
-          team1LogoId: match.team1LogoId,
-          team2Id: match.team2Id,
-          team2LogoId: match.team2LogoId,
-          team1: t1Ident,
-          team2: t2Ident,
-          date: match.date,
-          venue: match.venue,
-          city: match.city,
-          status: match.status,
-          matchDesc: match.matchDesc,
-          seriesName: match.seriesName,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-
-      try {
-        await batch.commit();
-        syncedMatchShortNames.push(`${t1Ident} vs ${t2Ident}`);
-        console.log(`Successfully committed match ${match.id}`);
-
-        // Sync team1 players
-        if (match.team1Id && match.team1 !== 'TBC' && !syncedTeams.has(match.team1Id)) {
-          console.log(`Fetching players for team ${match.team1Id} (${t1Ident})`);
-          await sleep(1500); // Wait 1.5s to avoid rate limit
-          const teamPlayers = await getTeamPlayers(match.team1Id);
-          console.log(`Players found for ${match.team1}:`, teamPlayers?.player?.length || 0);
-          
-          if (teamPlayers && teamPlayers.player) {
-            const playerBatch = adminDb.batch();
-            let t1Role = 'PLAYER'; // Scoped strictly to team 1 transaction block
-
-            for (const p of teamPlayers.player) {
-              // Category sub-header parser validation
-              if (!p.id) {
-                t1Role = p.name || 'PLAYER';
-                continue;
-              }
-
-              const playerRef = adminDb.collection('players').doc(p.id.toString());
-              playerBatch.set(
-                playerRef,
-                {
-                  id: p.id.toString(),
-                  name: p.name,
-                  role: t1Role,
-                  teamId: match.team1Id,
-                  team: t1Ident, // Safely fallback on clean short name identifier
-                  battingStyle: p.battingStyle || null,
-                  bowlingStyle: p.bowlingStyle || null,
-                  imageId: p.imageId || null,
-                  price: 8 + Math.random() * 3,
-                  updatedAt: new Date().toISOString(),
-                },
-                { merge: true }
-              );
-            }
-            await playerBatch.commit();
-            syncedTeams.add(match.team1Id);
-            console.log(`Synced players for ${match.team1}`);
-          } else {
-            teamsWithNoPlayers.push(t1Ident);
-          }
-        }
-
-        // Sync team2 players
-        if (match.team2Id && match.team2 !== 'TBC' && !syncedTeams.has(match.team2Id)) {
-          console.log(`Fetching players for team ${match.team2Id} (${t2Ident})`);
-          await sleep(1500); // Wait 1.5s to avoid rate limit
-          const teamPlayers = await getTeamPlayers(match.team2Id);
-          console.log(`Players found for ${match.team2}:`, teamPlayers?.player?.length || 0);
-
-          if (teamPlayers && teamPlayers.player) {
-            const playerBatch = adminDb.batch();
-            let t2Role = 'PLAYER'; // Scoped strictly to team 2 transaction block
-
-            for (const p of teamPlayers.player) {
-              // Category sub-header parser validation
-              if (!p.id) {
-                t2Role = p.name || 'PLAYER';
-                continue;
-              }
-
-              const playerRef = adminDb.collection('players').doc(p.id.toString());
-              playerBatch.set(
-                playerRef,
-                {
-                  id: p.id.toString(),
-                  name: p.name,
-                  role: t2Role,
-                  teamId: match.team2Id,
-                  team: t2Ident, // Safely fallback on clean short name identifier
-                  battingStyle: p.battingStyle || null,
-                  bowlingStyle: p.bowlingStyle || null,
-                  imageId: p.imageId || null,
-                  price: 8 + Math.random() * 3,
-                  updatedAt: new Date().toISOString(),
-                },
-                { merge: true }
-              );
-            }
-            await playerBatch.commit();
-            syncedTeams.add(match.team2Id);
-            console.log(`Synced players for ${match.team2}`);
-          } else {
-            teamsWithNoPlayers.push(t2Ident);
-          }
-        }
-      } catch (err) {
-        console.error(`Batch commit failed for ${match.id}:`, err);
+      if (match.team1Id && match.team1 !== 'TBC') {
+        await syncTeamPlayers(match.team1Id, t1Ident);
+      }
+      if (match.team2Id && match.team2 !== 'TBC') {
+        await syncTeamPlayers(match.team2Id, t2Ident);
       }
     }
 
@@ -266,12 +256,16 @@ export async function GET(req: Request) {
       : undefined;
     if (warning) console.warn(warning);
 
+    const durationMs = Date.now() - startedAt;
+    console.log(`Sync completed in ${durationMs}ms`);
+
     return NextResponse.json({
       success: true,
       message: `Successfully synced ${syncedMatchShortNames.length} IPL ${CRICKET_CONFIG.IPL_SEASON} fixtures.`,
       matchesSynced: syncedMatchShortNames,
       totalFound: matches.length,
       warning,
+      durationMs,
       debug: {
         matchesFound: matches.map(m => m.matchDesc),
         hasMatchDetails: !!data.matchDetails,
