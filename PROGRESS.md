@@ -258,6 +258,38 @@ Audit item #9 — a phone-first polish pass, explicitly **no** data/rules/scorin
 
 Full test matrix: 103 unit/component tests (was 92 — +7 `shortPlayerName`, +5 `Sheet` a11y, dashboard surname assertions updated), 8/8 Playwright E2E green against the emulator (draft flow, Squad Room surnames, leaderboard, visibility all unaffected), `npm run build`/`lint`/`tsc --noEmit` clean. `firestore.rules` untouched — **no `firebase deploy` needed**; app code deploys via `vercel --prod`.
 
+## Growth guardrails: what breaks first if the group grows (2026-07-26)
+
+Audit item #10 — deliberately **documentation-only**, no code. The standing decision to stay on Firebase at friend-group scale (see "Database & Auth" above) is sound and this item does **not** reopen it; the point is to write down, in one place, the *order* things would strain if the group doubled a few times, so future growth is a known-cost decision instead of a surprise (and so a future "we're getting slow / quota emails" doesn't trigger a reflexive Postgres re-litigation). The re-litigation guard at the top of this file applies to everything below.
+
+### Scale thresholds (what strains first, and the pre-decided answer)
+
+Ordered by what would actually hit first:
+
+1. **Per-visit Firestore reads → free-tier read quota.** This is the first thing that strains. Firebase Spark free tier is **50K document reads/day**. After audit item #6, a cold dashboard load is ~80 doc reads (8 `userSquads` + ~74 season-scoped `matches`; the ~248-doc full-`players` read was eliminated) — *before* item #6 it was ~330. So: 50,000 ÷ ~80 ≈ **comfortable to roughly 600 dashboard cold-loads/day**, i.e. well past 100 daily-active users at a few visits each. Pre-item-6 (~330/visit) that ceiling was ~150 loads/day — item #6 is what bought the headroom. **Pre-decided answer if the quota is ever actually approached:** the client SDK's `persistentLocalCache` is already enabled (item #6), so the next lever is deliberately reading matches/rosters from cache-first (they only change on admin sync) or moving to `onSnapshot` live listeners — a correctness/staleness tradeoff to make explicitly then, not now.
+
+2. **Live-computed leaderboard grows linearly (users × scored-squads-per-week).** `/leaderboard` computes standings on every page load from scored squads in the week's date range (`src/lib/leaderboard.ts`, `GET /api/leaderboard`) — no rollup collection. This is O(users × matches/week) per load. Fine to ~100 users. **Pre-decided answer beyond that:** introduce a per-week rollup document written at finalize time; not worth the added write-path complexity and staleness surface at current scale.
+
+3. **`POST /api/finalize-match` uses one Firestore batch (limit 500 ops).** It accumulates one `batch.update()` per submitted squad plus one for the match doc into a single `adminDb.batch()` (`src/app/api/finalize-match/route.ts:95-105`). Firestore caps a batch at **500 writes**, so this silently caps at ~**499 submitted squads per match**. Irrelevant at friend-group scale (a dozen squads); **if squads-per-match ever approaches ~400, chunk the batch at 400** (same pattern already used for the match-writes batch in the sync route, audit item #7).
+
+4. **`GET /api/admin/backup` holds the entire export in memory as one JSON string.** It reads every backed-up collection fully and `JSON.stringify`s them into one response (`src/app/api/admin/backup/route.ts:19-33`). Fine below ~50MB of total data; **beyond that, page it by collection/subcollection and stream** rather than building one string. Not close at current scale.
+
+Two things that are explicitly **fine, no action:**
+- The admin users route already paginates `listUsers` correctly (`src/app/api/admin/users/route.ts`) — Firebase Auth's own 1000-per-page limit is handled.
+- Cross-season data growth is already handled by audit item #4's `seriesId` scoping — old seasons stay in Firestore for history without inflating the current fixture list, leaderboard week count, or dashboard.
+
+**The concrete scalability work that was actually worth doing is items #4, #6, and #7** — they removed the three real multiplication factors (cross-season data growth, per-visit full-collection reads, full-rewrite syncs that re-touch every doc). Nothing else here warrants *building* at current scale; the rest is documented thresholds, not a backlog.
+
+### Multi-league / multi-season (design sketch only — do NOT build)
+
+One shared `settings/visibility` toggle and one global leaderboard structurally can't express two separate friend leagues. Recorded here purely as "the shape of the change if it's ever asked for," so that ask lands as a bounded feature rather than a database-migration debate:
+
+- Add a `leagueId` field to `userSquads` and a `leagues` collection (`{ members: uid[], settings: { visibility, ... } }`, i.e. the visibility toggle moves from one global `settings/visibility` doc to per-league settings). Every current squad query gains one `where('leagueId', '==', ...)`. No migration of existing data needed — existing squads default to a single implicit "main" league.
+- **Season scoping comes free** from item #4's `seriesId` work; multi-season is already effectively handled, so "multi-league" is the only genuinely new axis.
+- This stays on Firestore — it's additive fields + one collection + one extra `where` per query, not a reason to revisit the Postgres decision.
+
+**Acceptance (met):** this file now states, in one place, what breaks first at 10× (the per-visit read quota, then the linear leaderboard, then the finalize batch cap, then the in-memory backup) and the pre-decided answer for each, plus the multi-league shape if ever needed.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)
