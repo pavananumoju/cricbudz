@@ -26,6 +26,19 @@
   --color-danger-tint: var(--danger-tint);
   --color-warning: var(--warning);
   --color-warning-tint: var(--warning-tint);
+
+  /* Legibility floor (audit item #9). The app is phone-first and heavily
+     stylized with tiny uppercase micro-labels; much informational text had
+     drifted to 7-10px. Two documented floors, used app-wide:
+       text-meta  = 12px — informational text you actually read (player roles
+                    and prices, status lines, dates/times, emails, leaderboard
+                    sub-labels, trio-chip surnames).
+       text-micro = 11px — purely decorative uppercase micro-labels (stat
+                    captions, "Browse all", slot labels) that were 7-8px. */
+  --text-meta: 0.75rem; /* 12px */
+  --text-meta--line-height: 1rem;
+  --text-micro: 0.6875rem; /* 11px */
+  --text-micro--line-height: 0.875rem;
 }
 
 :root {

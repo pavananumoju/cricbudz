@@ -32,6 +32,24 @@ export function getMatchDayIST(input: string | Date | number): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(input));
 }
 
+// Trio chips everywhere used to render a bare surname (`name.split(' ').pop()`),
+// so two "Sharma"s or two "Pandya"s in the same match were indistinguishable in
+// the Squad Room and on the dashboard. Produce an initial-plus-surname short form
+// ("Rohit Sharma" -> "R Sharma") instead; callers keep the full name on
+// title/aria-label so the disambiguation is available to sighted and assistive
+// users alike. A single-token name is returned unchanged.
+export function shortPlayerName(fullName: string | undefined | null): string {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? '';
+  const surname = parts[parts.length - 1];
+  const initials = parts
+    .slice(0, -1)
+    .map((p) => p[0].toUpperCase())
+    .join('');
+  return `${initials} ${surname}`;
+}
+
 export function getTeamLogo(teamCode: string, logoId?: number): string {
   if (logoId) {
     return `https://static.cricbuzz.com/a/img/v1/72x72/i1/c${logoId}/team.jpg`;

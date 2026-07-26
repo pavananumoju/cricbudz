@@ -48,7 +48,7 @@ export default function RulesPage() {
         <Card className="overflow-hidden">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-surface-hover border-b border-border text-[9px] text-muted uppercase font-black tracking-widest">
+              <tr className="bg-surface-hover border-b border-border text-micro text-muted uppercase font-black tracking-widest">
                 <th className="px-4 py-3">Event</th>
                 <th className="px-4 py-3 text-right">Points</th>
               </tr>
@@ -58,7 +58,7 @@ export default function RulesPage() {
                 <tr key={idx}>
                   <td className="px-4 py-3 text-xs font-black uppercase tracking-tight italic">{rule.subject}</td>
                   <td className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center justify-center min-w-[36px] px-2.5 py-1 bg-primary-tint text-primary rounded-lg text-[11px] font-black">
+                    <span className="inline-flex items-center justify-center min-w-[36px] px-2.5 py-1 bg-primary-tint text-primary rounded-lg text-meta font-black">
                       +{rule.points}
                     </span>
                   </td>
@@ -67,7 +67,7 @@ export default function RulesPage() {
             </tbody>
           </table>
         </Card>
-        <p className="text-[10px] text-muted leading-relaxed mt-3 px-1">{DOT_BALL_FOOTNOTE}</p>
+        <p className="text-meta text-muted leading-relaxed mt-3 px-1">{DOT_BALL_FOOTNOTE}</p>
       </section>
     </div>
   );

@@ -99,11 +99,11 @@ export default function SelectedSlots({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-display font-black text-[11px] uppercase tracking-tight italic truncate text-foreground leading-tight pr-2">
+                    <h4 className="font-display font-black text-meta uppercase tracking-tight italic truncate text-foreground leading-tight pr-2">
                       {player.name}
                     </h4>
                     <span className={cn(
-                      "text-[8px] font-mono tracking-widest font-black uppercase",
+                      "text-micro font-mono tracking-widest font-black uppercase",
                       playerBrand.textClass
                     )}>
                       {player.team}
@@ -147,11 +147,11 @@ export default function SelectedSlots({
             ) : (
               <div className="flex items-center gap-2 mx-auto text-muted/60">
                 <User size={10} />
-                <span className="font-display font-black text-[8px] uppercase tracking-widest italic">Trio Slot 0{index + 1}</span>
+                <span className="font-display font-black text-micro uppercase tracking-widest italic">Trio Slot 0{index + 1}</span>
               </div>
             )}
             {isAssignedMvp && (
-              <div className="absolute -top-1.5 -right-1.5 bg-accent text-white px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter italic shadow-sm z-10">
+              <div className="absolute -top-1.5 -right-1.5 bg-accent text-white px-1.5 py-0.5 rounded-full text-micro font-black uppercase tracking-tighter italic shadow-sm z-10">
                 MVP
               </div>
             )}

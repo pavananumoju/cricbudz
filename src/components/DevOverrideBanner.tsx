@@ -18,12 +18,12 @@ export function DevOverrideBanner() {
   return (
     <div className="bg-warning-tint border-b border-warning/30 px-3 py-2 flex items-center justify-center gap-2 text-center">
       <AlertTriangle size={13} className="text-warning shrink-0" />
-      <p className="text-[10px] font-black uppercase tracking-wide text-warning">
+      <p className="text-meta font-black uppercase tracking-wide text-warning">
         Dev date override active on this device: {dateOverride}
       </p>
       <button
         onClick={() => setDateOverride(null)}
-        className="text-[10px] font-black uppercase tracking-wide text-warning underline underline-offset-2 shrink-0"
+        className="text-meta font-black uppercase tracking-wide text-warning underline underline-offset-2 shrink-0"
       >
         Clear
       </button>

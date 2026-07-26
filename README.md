@@ -174,6 +174,15 @@ ipl-fantasy-arena/
 * Two-team side-by-side browsing on all screen sizes; mobile uses a sticky bottom bar + bottom sheet for reviewing/submitting the trio, desktop shows a persistent sidebar instead.
 * Users can delete a saved draft (dashboard's "Other Drafts" section, tap-to-confirm), gated to before-toss only — same rule as editing.
 
+## Accessibility & Legibility (audit item #9)
+
+Phone-first polish pass; no data, rules, or scoring changes.
+
+* **Type floor.** Two documented font-size tokens live in `@theme` in `src/app/globals.css`: `text-meta` (12px) for informational text you actually read (player roles/prices, status lines, dates/times, emails, leaderboard sub-labels, the draft validation checklist, `/rules` point values, trio-chip names) and `text-micro` (11px) for purely decorative uppercase micro-labels (stat captions, nav labels, slot labels). The audit found much informational text had drifted to 7–10px; all of it is now ≥12px. Short decorative pills that were already ≥10px (e.g. the shared `Badge`, 2–4-char team codes next to a logo) are left as-is — they're legible chrome, and blanket-raising every one risks layout churn in the compact UI.
+* **Same-surname disambiguation.** Trio chips (dashboard + Squad Room) used to render a bare surname (`name.split(' ').pop()`), so two Sharmas or two Pandyas in one match were indistinguishable. `shortPlayerName()` (`src/lib/utils.ts`) renders an initial-plus-surname short form instead ("Rohit Sharma" → "R Sharma"); the full name stays on the chip's `title`/`aria-label` for hover and assistive tech.
+* **Bottom sheet is a real dialog.** `src/components/ui/Sheet.tsx` (mobile profile menu + trio-submit sheet) now has `role="dialog"`, `aria-modal`, an accessible name from its title, Escape-to-close, a Tab focus trap, focus-in on open, and focus-return to the trigger on close. The close button is labelled `Close`. Covered by `src/components/ui/Sheet.test.tsx`.
+* **Completed fixture cards** no longer dim the whole card to 60% opacity (which pushed already-small text below comfortable contrast) — they use a subtle muted background tint plus the existing "Completed" badge instead.
+
 ## Admin / Dev Control Center (`/admin`)
 
 * Gated by `isAdmin` (redirects non-admins), with real server-side enforcement on every privileged action — `/api/sync`, `/api/finalize-match`, and `/api/admin/*` all require a valid ID token with the `admin` claim, checked via the shared `requireAdmin()` helper (`src/lib/adminAuth.ts`).
@@ -396,7 +405,7 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
 }
 ```
 
-`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `playerNames` (same order as `players`) is denormalized from the selected `Player` objects at save time (audit item #6) so the dashboard can show trio surnames without fetching the entire `players` collection (~250 docs) just to resolve 3-6 IDs. `totalPoints` is absent until an admin finalizes that match's scoring.
+`matchTimestamp`/`matchDay` are denormalized from the match at save time specifically so Firestore rules can evaluate "has toss passed" / "does the visibility toggle apply today" without an extra document read per squad. `userDisplayName`/`userPhotoURL` are denormalized from the authenticated user for the same reason — the client SDK has no way to look up another user's profile by uid otherwise (needed for "Squad Room" and the leaderboard). `playerNames` (same order as `players`) is denormalized from the selected `Player` objects at save time (audit item #6) so the dashboard can show trio names (rendered via `shortPlayerName()` as an initial + surname, audit item #9) without fetching the entire `players` collection (~250 docs) just to resolve 3-6 IDs. `totalPoints` is absent until an admin finalizes that match's scoring.
 
 `playerNames` is optional on the type (`playerNames?: string[]`) because squads saved before this field existed lack it — `scripts/backfill-squad-playernames.mjs` (dry-run via `--dry-run`, same pattern as `backfill-squad-fields.mjs`) backfills it by looking up each player ID once (cached across squads) and is safe to re-run (skips docs that already have a correctly-sized `playerNames`). The dashboard falls back to `"..."` for any squad still missing it. `firestore.rules`' `isValidSquadShape()` now also requires `playerNames` to be a 3-element list on every create/update, so every *new* write always carries it regardless of whether the backfill has run — the backfill only matters for displaying pre-existing squads correctly.
 

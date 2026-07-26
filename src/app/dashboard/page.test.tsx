@@ -66,12 +66,16 @@ describe('Dashboard — trio surnames from denormalized playerNames', () => {
     deleteUserSquad.mockResolvedValue(undefined);
   });
 
-  it('renders trio surnames from squad.playerNames without fetching the players collection', async () => {
+  it('renders initial+surname trio chips from squad.playerNames (disambiguating same-surname players) without fetching the players collection', async () => {
     render(<Dashboard />);
 
-    await waitFor(() => expect(screen.getByText('Kohli')).toBeInTheDocument());
-    expect(screen.getByText('Sharma')).toBeInTheDocument();
-    expect(screen.getByText('Bumrah')).toBeInTheDocument();
+    // shortPlayerName: "Virat Kohli" -> "V Kohli", so two "Sharma"s would read
+    // "R Sharma" vs "X Sharma" instead of a bare, ambiguous "Sharma".
+    await waitFor(() => expect(screen.getByText('V Kohli')).toBeInTheDocument());
+    expect(screen.getByText('R Sharma')).toBeInTheDocument();
+    expect(screen.getByText('J Bumrah')).toBeInTheDocument();
+    // Full name stays available on the chip for hover/assistive tech.
+    expect(screen.getByTitle('Virat Kohli')).toBeInTheDocument();
   });
 
   it('falls back to "..." for a pre-migration squad with no playerNames yet', async () => {

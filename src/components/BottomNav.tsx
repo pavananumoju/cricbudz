@@ -37,7 +37,7 @@ export function BottomNav() {
               />
               <span
                 className={cn(
-                  'text-[9px] font-black uppercase tracking-widest transition-colors',
+                  'text-micro font-black uppercase tracking-widest transition-colors',
                   isActive ? 'text-primary' : 'text-muted'
                 )}
               >

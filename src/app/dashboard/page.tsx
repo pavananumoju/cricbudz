@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { cn, getTeamLogo, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
+import { cn, getTeamLogo, getMatchTimeStatus, getMatchDayIST, shortPlayerName } from '@/lib/utils';
 import { getUserSquads, getMatches, deleteUserSquad } from '@/services/dataService';
 import { UserSquad, Match } from '@/types';
 import { useDev } from '@/context/DevContext';
@@ -227,11 +227,11 @@ export default function Dashboard() {
 
         <div className="flex gap-2 shrink-0">
           <Card className="px-3 py-2 flex flex-col items-center min-w-[64px]">
-            <span className="text-[8px] font-black text-muted uppercase tracking-widest leading-none mb-1">Trios</span>
+            <span className="text-micro font-black text-muted uppercase tracking-widest leading-none mb-1">Trios</span>
             <span className="text-base font-display font-black italic">{squads.length}</span>
           </Card>
           <div className="px-3 py-2 rounded-3xl bg-primary flex flex-col items-center min-w-[64px] shadow-sm shadow-primary/20">
-            <span className="text-[8px] font-black text-primary-foreground/70 uppercase tracking-widest leading-none mb-1">MVPs</span>
+            <span className="text-micro font-black text-primary-foreground/70 uppercase tracking-widest leading-none mb-1">MVPs</span>
             <span className="text-base font-display font-black italic text-primary-foreground">
               {squads.filter((s) => !!s.mvpId).length}
             </span>
@@ -253,7 +253,7 @@ export default function Dashboard() {
           <Card className="h-40 border-dashed flex flex-col items-center justify-center text-center px-6">
             <PlusCircle className="w-8 h-8 text-muted/50 mb-2" />
             <h3 className="font-display font-black text-sm uppercase italic text-muted mb-1">Ready for Kickoff?</h3>
-            <p className="text-[11px] text-muted mb-3 max-w-xs leading-relaxed">
+            <p className="text-meta text-muted mb-3 max-w-xs leading-relaxed">
               No active trios found. Pick a match to start drafting.
             </p>
             <Link
@@ -284,8 +284,8 @@ export default function Dashboard() {
                   <Card className="p-5">
                     <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
                       <div className="min-w-0">
-                        <p className="text-[11px] font-black text-primary uppercase tracking-wider leading-none">{label.base}</p>
-                        <p className="text-[9px] font-bold text-muted uppercase tracking-wider mt-1 truncate">{label.suffix}</p>
+                        <p className="text-meta font-black text-primary uppercase tracking-wider leading-none">{label.base}</p>
+                        <p className="text-meta font-bold text-muted uppercase tracking-wider mt-1 truncate">{label.suffix}</p>
                       </div>
                       <Badge variant={isCompleted ? 'neutral' : isLocked ? 'danger' : 'success'} dot={!isCompleted}>
                         {isCompleted ? 'Completed' : isLocked ? 'Locked' : 'Live'}
@@ -320,9 +320,14 @@ export default function Dashboard() {
                           const playerName = data.squad!.playerNames?.[pIdx];
                           const isMvp = data.squad!.mvpId === pId;
                           return (
-                            <Badge key={pIdx} variant={isMvp ? 'mvp' : 'neutral'}>
+                            <Badge
+                              key={pIdx}
+                              variant={isMvp ? 'mvp' : 'neutral'}
+                              title={playerName || undefined}
+                              aria-label={playerName ? `${playerName}${isMvp ? ' (MVP)' : ''}` : undefined}
+                            >
                               {isMvp && <Zap size={9} className="fill-current" />}
-                              {playerName ? playerName.split(' ').pop() : '...'}
+                              {playerName ? shortPlayerName(playerName) : '...'}
                             </Badge>
                           );
                         })}
@@ -330,12 +335,12 @@ export default function Dashboard() {
                     ) : (
                       <div className="flex items-center gap-2 text-muted mb-4">
                         <PlusCircle size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-widest italic">No Trio Selected</span>
+                        <span className="text-meta font-black uppercase tracking-widest italic">No Trio Selected</span>
                       </div>
                     )}
 
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono font-bold text-muted">
+                      <span className="text-meta font-mono font-bold text-muted">
                         {new Date(data.match.date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
                       </span>
                       {!isLocked ? (
@@ -346,7 +351,7 @@ export default function Dashboard() {
                           {hasSquad ? 'Edit Trio' : 'Draft Trio'}
                         </Link>
                       ) : (
-                        <span className="text-[9px] text-muted italic">{isCompleted ? 'Completed' : 'Finalized'}</span>
+                        <span className="text-meta text-muted italic">{isCompleted ? 'Completed' : 'Finalized'}</span>
                       )}
                     </div>
                   </Card>
@@ -366,7 +371,7 @@ export default function Dashboard() {
             </div>
             <div className="min-w-0">
               <span className="block font-display font-black text-xs uppercase">Fixtures</span>
-              <span className="text-[8px] font-bold text-muted uppercase tracking-widest">Browse all</span>
+              <span className="text-micro font-bold text-muted uppercase tracking-widest">Browse all</span>
             </div>
           </Link>
 
@@ -376,7 +381,7 @@ export default function Dashboard() {
             </div>
             <div className="min-w-0">
               <span className="block font-display font-black text-xs uppercase">Ranks</span>
-              <span className="text-[8px] font-bold text-muted uppercase tracking-widest">Global board</span>
+              <span className="text-micro font-bold text-muted uppercase tracking-widest">Global board</span>
             </div>
           </Link>
 
@@ -391,7 +396,7 @@ export default function Dashboard() {
               </div>
               <div className="min-w-0">
                 <span className="block font-display font-black text-xs uppercase">Sync Fixtures</span>
-                <span className="text-[8px] font-bold text-primary uppercase tracking-widest">Admin only</span>
+                <span className="text-micro font-bold text-primary uppercase tracking-widest">Admin only</span>
               </div>
             </button>
           )}
@@ -418,7 +423,7 @@ export default function Dashboard() {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="text-[9px] font-black text-primary uppercase tracking-widest truncate">{label ? label.base : `Draft #${s.matchId}`}</p>
+                      <p className="text-micro font-black text-primary uppercase tracking-widest truncate">{label ? label.base : `Draft #${s.matchId}`}</p>
                       <p className="font-display font-black text-xs italic uppercase truncate">
                         {s.match ? s.match.matchDesc || `${s.match.team1} vs ${s.match.team2}` : 'Unknown Match'}
                       </p>
@@ -431,7 +436,7 @@ export default function Dashboard() {
                         onBlur={() => setConfirmDeleteId((id) => (id === s.matchId ? null : id))}
                         disabled={deletingId === s.matchId}
                         className={cn(
-                          'flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50',
+                          'flex items-center gap-1 text-micro font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50',
                           isConfirming
                             ? 'text-danger border-danger/40 bg-danger-tint'
                             : 'text-muted border-border hover:text-danger hover:border-danger/30'
@@ -443,7 +448,7 @@ export default function Dashboard() {
                     )}
                     <Link
                       href={`/matches/${s.matchId}`}
-                      className="text-[9px] font-black text-primary uppercase tracking-widest px-3 py-1.5 rounded-lg border border-primary/20 shrink-0"
+                      className="text-micro font-black text-primary uppercase tracking-widest px-3 py-1.5 rounded-lg border border-primary/20 shrink-0"
                     >
                       View
                     </Link>

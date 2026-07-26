@@ -75,7 +75,7 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
             unoptimized 
           />
         ) : (
-          <span className={cn("font-display font-black text-[9px] tracking-wider", brand.textClass)}>
+          <span className={cn("font-display font-black text-micro tracking-wider", brand.textClass)}>
             {getInitials(player.name)}
           </span>
         )}
@@ -84,9 +84,9 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
       <div className="flex-1 min-w-0 pr-2">
         <h4 className="font-display font-black text-xs lg:text-[13px] uppercase tracking-tight italic truncate leading-tight pr-2 text-foreground">{player.name}</h4>
         <div className="flex items-center gap-2">
-          <span className="text-[7px] font-black text-muted uppercase tracking-widest">{player.role}</span>
+          <span className="text-meta font-black text-muted uppercase tracking-widest">{player.role}</span>
           <span className="w-0.5 h-0.5 rounded-full bg-border" />
-          <span className="text-[8px] font-mono font-bold text-muted">₹{player.price.toFixed(1)}M</span>
+          <span className="text-meta font-mono font-bold text-muted">₹{player.price.toFixed(1)}M</span>
         </div>
       </div>
 

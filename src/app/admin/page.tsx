@@ -189,7 +189,7 @@ export default function AdminPage() {
             <h2 className="font-display font-black text-sm uppercase tracking-tight italic">System Date Override</h2>
           </div>
 
-          <label htmlFor="date-override" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
+          <label htmlFor="date-override" className="block text-micro font-black uppercase tracking-[0.2em] text-muted mb-2">
             Override Date
           </label>
           <div className="flex gap-2 mb-4">
@@ -210,7 +210,7 @@ export default function AdminPage() {
 
           <div className="p-3.5 rounded-2xl bg-warning-tint border border-warning/20 flex gap-3">
             <AlertCircle size={17} className="text-warning shrink-0 mt-0.5" />
-            <p className="text-[11px] text-muted leading-relaxed font-medium">
+            <p className="text-meta text-muted leading-relaxed font-medium">
               Simulates the selected date app-wide (hours/minutes still track the real clock).
               Current: <span className="text-primary font-mono font-bold">{dateOverride || 'System date'}</span>
             </p>
@@ -236,7 +236,7 @@ export default function AdminPage() {
               >
                 <div className="text-left">
                   <span className="block text-sm font-bold text-foreground">Hide trios until toss</span>
-                  <span className="block text-[10px] text-muted mt-0.5">
+                  <span className="block text-meta text-muted mt-0.5">
                     Stops users copying each other&apos;s picks on a critical day
                   </span>
                 </div>
@@ -255,7 +255,7 @@ export default function AdminPage() {
                 </span>
               </button>
 
-              <label htmlFor="vis-date" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
+              <label htmlFor="vis-date" className="block text-micro font-black uppercase tracking-[0.2em] text-muted mb-2">
                 Applies to (IST calendar day)
               </label>
               <div className="flex gap-2 mb-4">
@@ -273,7 +273,7 @@ export default function AdminPage() {
 
               <div className="p-3.5 rounded-2xl bg-warning-tint border border-warning/20 flex gap-3">
                 <AlertCircle size={17} className="text-warning shrink-0 mt-0.5" />
-                <p className="text-[11px] text-muted leading-relaxed font-medium">
+                <p className="text-meta text-muted leading-relaxed font-medium">
                   Only affects the named day&apos;s not-yet-toss matches. Past and already-tossed matches are
                   always visible to everyone. No need to remember to turn this off — it&apos;s automatically
                   inert on any other day.
@@ -309,9 +309,9 @@ export default function AdminPage() {
                         <h4 className="font-display font-black text-xs uppercase tracking-tight truncate">
                           {u.displayName || u.email || u.uid}
                         </h4>
-                        {isSelf && <span className="text-[8px] font-black text-muted uppercase tracking-widest">(You)</span>}
+                        {isSelf && <span className="text-micro font-black text-muted uppercase tracking-widest">(You)</span>}
                       </div>
-                      <p className="text-[10px] text-muted truncate mt-0.5">{u.email}</p>
+                      <p className="text-meta text-muted truncate mt-0.5">{u.email}</p>
                     </div>
                     {u.isAdmin && (
                       <Badge variant="primary" className="shrink-0">
@@ -342,7 +342,7 @@ export default function AdminPage() {
             <DatabaseBackup size={17} className="text-primary" />
             <h2 className="font-display font-black text-sm uppercase tracking-tight italic">Data Backup</h2>
           </div>
-          <p className="text-[11px] text-muted leading-relaxed font-medium mb-4">
+          <p className="text-meta text-muted leading-relaxed font-medium mb-4">
             Downloads every collection (matches, players, squads, settings) as one JSON file to your device.
             Keep it somewhere safe — if Firestore data is ever lost, this file can restore it.
           </p>

@@ -15,7 +15,7 @@ import {
   getVisibilitySettings,
 } from '@/services/dataService';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
-import { cn, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
+import { cn, getMatchTimeStatus, getMatchDayIST, shortPlayerName } from '@/lib/utils';
 import { SQUAD_TARGET_SIZE, checkDualFranchiseViolation, validateSquad } from '@/lib/draftRules';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
@@ -315,21 +315,21 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
               <span className="text-muted px-1.5">vs</span>
               <span className={team2Brand.textClass}>{match.team2}</span>
             </h2>
-            <p className="text-[9px] text-muted font-bold tracking-widest uppercase">Trio Selection</p>
+            <p className="text-micro text-muted font-bold tracking-widest uppercase">Trio Selection</p>
           </div>
           {isCompleted ? (
             <div className="flex items-center gap-1 shrink-0 text-muted">
               <CheckCircle2 size={13} />
-              <span className="text-[10px] font-display font-black uppercase tracking-tight">Completed</span>
+              <span className="text-meta font-display font-black uppercase tracking-tight">Completed</span>
             </div>
           ) : isLocked ? (
             <div className="flex items-center gap-1 shrink-0 text-danger">
               <Lock size={13} />
-              <span className="text-[10px] font-display font-black uppercase tracking-tight">Locked</span>
+              <span className="text-meta font-display font-black uppercase tracking-tight">Locked</span>
             </div>
           ) : (
             <div className="text-right shrink-0 w-11">
-              <p className="text-[8px] font-mono font-black text-muted uppercase leading-none">Picks</p>
+              <p className="text-micro font-mono font-black text-muted uppercase leading-none">Picks</p>
               <p className="text-sm font-display font-black text-primary italic leading-none mt-1">{selectedPlayers.length}/3</p>
             </div>
           )}
@@ -338,7 +338,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           <div className="bg-surface-hover border-t border-border">
             <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
               <CheckCircle2 size={11} className="text-muted shrink-0" />
-              <p className="text-[9px] font-bold text-muted uppercase tracking-wide">
+              <p className="text-meta font-bold text-muted uppercase tracking-wide">
                 Match completed — your final trio is shown below
               </p>
             </div>
@@ -347,7 +347,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           <div className="bg-danger-tint border-t border-danger/20">
             <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
               <Lock size={11} className="text-danger shrink-0" />
-              <p className="text-[9px] font-bold text-danger uppercase tracking-wide">
+              <p className="text-meta font-bold text-danger uppercase tracking-wide">
                 Arena locked — no further changes permitted
               </p>
             </div>
@@ -362,8 +362,8 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
               style={{ borderLeft: `3px solid ${team1Brand.accentColor}` }}
               className="px-3 py-2.5 rounded-xl bg-surface border border-border flex items-center justify-between"
             >
-              <span className={cn('font-display font-black text-[11px] uppercase italic truncate', team1Brand.textClass)}>{match.team1}</span>
-              <span className="text-[9px] font-mono font-black text-muted shrink-0">{team1Players.length}</span>
+              <span className={cn('font-display font-black text-meta uppercase italic truncate', team1Brand.textClass)}>{match.team1}</span>
+              <span className="text-meta font-mono font-black text-muted shrink-0">{team1Players.length}</span>
             </div>
             <div className="space-y-1.5">
               {team1Players.map((player) => (
@@ -384,8 +384,8 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
               style={{ borderLeft: `3px solid ${team2Brand.accentColor}` }}
               className="px-3 py-2.5 rounded-xl bg-surface border border-border flex items-center justify-between"
             >
-              <span className={cn('font-display font-black text-[11px] uppercase italic truncate', team2Brand.textClass)}>{match.team2}</span>
-              <span className="text-[9px] font-mono font-black text-muted shrink-0">{team2Players.length}</span>
+              <span className={cn('font-display font-black text-meta uppercase italic truncate', team2Brand.textClass)}>{match.team2}</span>
+              <span className="text-meta font-mono font-black text-muted shrink-0">{team2Players.length}</span>
             </div>
             <div className="space-y-1.5">
               {team2Players.map((player) => (
@@ -439,19 +439,19 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                 </h3>
               </div>
               {match.scoring && (
-                <p className="text-[10px] text-muted mb-3">
+                <p className="text-meta text-muted mb-3">
                   Last finalized {new Date(match.scoring.finalizedAt).toLocaleString()}.
                 </p>
               )}
               {match.scoring?.warnings && (
                 <div className="mb-3 p-3 rounded-xl bg-warning-tint border border-warning/20 flex gap-2">
                   <AlertTriangle size={14} className="text-warning shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-muted leading-relaxed">
+                  <p className="text-meta text-muted leading-relaxed">
                     {formatUnmatchedWarning(match.scoring.warnings)}
                   </p>
                 </div>
               )}
-              <label htmlFor="motm-select" className="block text-[9px] font-black uppercase tracking-[0.2em] text-muted mb-2">
+              <label htmlFor="motm-select" className="block text-micro font-black uppercase tracking-[0.2em] text-muted mb-2">
                 Man of the Match (optional)
               </label>
               <div className="flex gap-2">
@@ -479,12 +479,12 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                   onChange={(e) => setForceFinalize(e.target.checked)}
                   className="mt-0.5 shrink-0"
                 />
-                <span className="text-[10px] text-warning leading-relaxed">
+                <span className="text-meta text-warning leading-relaxed">
                   Force finalize even though Cricbuzz hasn&apos;t confirmed the match is complete — only for an
                   abandoned or rain-shortened match Cricbuzz will never flag as complete.
                 </span>
               </label>
-              <p className="text-[10px] text-muted leading-relaxed mt-3">
+              <p className="text-meta text-muted leading-relaxed mt-3">
                 Fetches the real scorecard from Cricbuzz and scores every submitted trio for this match. Only
                 works once Cricbuzz itself reports the match as complete, unless force is checked above.
               </p>
@@ -527,14 +527,14 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                       {squad.userPhotoURL ? (
                         <Image src={squad.userPhotoURL} alt="" width={24} height={24} className="w-full h-full object-cover" unoptimized />
                       ) : (
-                        <span className="text-[9px] font-black text-primary">{(squad.userDisplayName || '?').charAt(0)}</span>
+                        <span className="text-micro font-black text-primary">{(squad.userDisplayName || '?').charAt(0)}</span>
                       )}
                     </div>
                     <span className="text-xs font-display font-black uppercase truncate flex-1">
                       {squad.userDisplayName || 'Strategist'}
                     </span>
                     {squad.totalPoints !== undefined && (
-                      <span className="text-[10px] font-display font-black text-primary shrink-0">
+                      <span className="text-meta font-display font-black text-primary shrink-0">
                         {squad.totalPoints} pts
                       </span>
                     )}
@@ -546,13 +546,15 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                       return (
                         <span
                           key={pid}
+                          title={player?.name}
+                          aria-label={player ? `${player.name}${isMvp ? ' (MVP)' : ''}` : undefined}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight',
+                            'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-meta font-black uppercase tracking-tight',
                             isMvp ? 'bg-accent-tint text-accent' : 'bg-surface-hover text-muted'
                           )}
                         >
                           {isMvp && <Zap size={9} className="fill-current" />}
-                          {player ? player.name.split(' ').pop() : '...'}
+                          {player ? shortPlayerName(player.name) : '...'}
                         </span>
                       );
                     })}

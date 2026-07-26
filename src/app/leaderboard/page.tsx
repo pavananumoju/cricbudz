@@ -115,7 +115,7 @@ export default function LeaderboardPage() {
               </Badge>
             )}
           </div>
-          <p className="text-[10px] text-muted font-bold uppercase tracking-widest mt-0.5">{formatWeekLabel(weekRange)}</p>
+          <p className="text-meta text-muted font-bold uppercase tracking-widest mt-0.5">{formatWeekLabel(weekRange)}</p>
         </div>
         <button
           onClick={() => setWeekRange((r) => shiftWeek(r, 1))}
@@ -179,7 +179,7 @@ export default function LeaderboardPage() {
 
                   <div className="min-w-0 flex-1">
                     <h4 className="font-display font-black text-sm uppercase italic tracking-tight truncate">{entry.displayName}</h4>
-                    <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-0.5">
+                    <p className="text-meta font-bold text-muted uppercase tracking-widest mt-0.5">
                       {isWeekOver && isFirst
                         ? 'Winner'
                         : isWeekOver && entry.rank <= 3

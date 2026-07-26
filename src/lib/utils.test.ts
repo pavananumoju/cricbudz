@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cn, getMatchTimeStatus, getTeamLogo, getMatchDayIST, SQUAD_LOCK_WINDOW_MS, ASSUMED_MATCH_DURATION_MS } from './utils';
+import { cn, getMatchTimeStatus, getTeamLogo, getMatchDayIST, shortPlayerName, SQUAD_LOCK_WINDOW_MS, ASSUMED_MATCH_DURATION_MS } from './utils';
 
 describe('cn', () => {
   it('merges class names and resolves Tailwind conflicts', () => {
@@ -75,6 +75,36 @@ describe('getMatchDayIST', () => {
     } finally {
       process.env.TZ = original;
     }
+  });
+});
+
+describe('shortPlayerName', () => {
+  it('renders an initial plus surname for a normal two-part name', () => {
+    expect(shortPlayerName('Rohit Sharma')).toBe('R Sharma');
+    expect(shortPlayerName('Virat Kohli')).toBe('V Kohli');
+  });
+
+  it('distinguishes two players who share a surname', () => {
+    expect(shortPlayerName('Hardik Pandya')).toBe('H Pandya');
+    expect(shortPlayerName('Krunal Pandya')).toBe('K Pandya');
+  });
+
+  it('collapses multiple given names into their initials, keeping the surname', () => {
+    expect(shortPlayerName('Krishnappa Gowtham Nair')).toBe('KG Nair');
+  });
+
+  it('returns a single-token name unchanged', () => {
+    expect(shortPlayerName('Rashid')).toBe('Rashid');
+  });
+
+  it('handles extra/leading/trailing whitespace', () => {
+    expect(shortPlayerName('  MS   Dhoni  ')).toBe('M Dhoni');
+  });
+
+  it('returns an empty string for empty/nullish input', () => {
+    expect(shortPlayerName('')).toBe('');
+    expect(shortPlayerName(undefined)).toBe('');
+    expect(shortPlayerName(null)).toBe('');
   });
 });
 

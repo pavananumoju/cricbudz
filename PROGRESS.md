@@ -240,6 +240,24 @@ Audit item #8: five different places derived "what day is this" differently — 
 
 Full test matrix: 92 unit tests (7 new — `getMatchDayIST()` day-boundary cases including a `process.env.TZ`-pinned timezone-independence check, plus three new `leaderboard.ts` tests for the same), 29/29 rules tests unaffected (no rules change), 8/8 E2E (one assertion + the seed fixture updated to match the new IST semantics, described above). `npm run build`/`lint`/`tsc --noEmit` all clean.
 
+## Usability & legibility pass: type floor, surname disambiguation, dialog a11y (2026-07-26)
+
+Audit item #9 — a phone-first polish pass, explicitly **no** data/rules/scoring/behavior change (the honest flows are byte-for-byte identical; only presentation and keyboard/AT semantics changed).
+
+**Type floor via two documented `@theme` tokens.** Added `--text-meta` (12px) and `--text-micro` (11px) to `src/app/globals.css`'s `@theme` block (Tailwind v4 generates `text-meta`/`text-micro` utilities from them; verified the compiled CSS actually emits `.text-meta{font-size:.75rem}` / `.text-micro{font-size:.6875rem}` — if the token naming had been wrong the class would silently apply *no* font-size and inherit, which is worse than the original tiny text, so this was checked in the build output, not assumed). Swept every genuinely-**informational** small text usage up to `text-meta` (player roles/prices in `PlayerCard`, dashboard match labels/times/status, leaderboard week label + sub-labels, admin help copy + email, the draft `SubmissionControl` checklist, `/rules` point values + footnote, match-page status banners + team counts + Squad Room chips/points, `DevOverrideBanner`) and the tiniest **decorative** labels (7–8px stat captions, nav labels, slot labels) up to `text-micro`. Acceptance bar met: no informational text below 12px.
+
+**Deliberately left as-is:** the shared `Badge` primitive (10px) and 2–4-char team codes sitting next to a logo. These are short, high-contrast decorative chrome, already near the floor; blanket-raising every one of the dozens of `Badge` usages and nav/section chips risked real layout churn in a compact phone-first UI for negligible legibility gain. The audit's own split (≥11px *decorative* / ≥12px *informational*) and the acceptance criterion ("no *informational* text below 12px") both target informational text specifically — that's the bar that was enforced.
+
+**Same-surname disambiguation.** `shortPlayerName()` (`src/lib/utils.ts`, pure + unit-tested) replaces the two `name.split(' ').pop()` bare-surname renders (dashboard trio badges, Squad Room chips) with an initial-plus-surname short form ("Rohit Sharma" → "R Sharma", "Krunal Pandya" → "K Pandya"), so two same-surname players in one match are now distinguishable. Full name kept on `title`/`aria-label`. The dashboard unit test's exact-surname assertions (`getByText('Kohli')`) were updated to the new short form; `e2e/visibility.spec.ts` needed no change — it asserts the Squad Room surname with `{ exact: false }`, and "X Surname" still contains the surname substring.
+
+**Bottom sheet is now a real modal dialog.** `src/components/ui/Sheet.tsx` (mobile profile menu + trio-submit sheet) had no dialog semantics, no keyboard close, no focus management. Added `role="dialog"` + `aria-modal` + accessible name from the title, Escape-to-close, a Tab focus trap, focus-in on open, and focus-return to the trigger on close; labelled the close button. New RTL test `src/components/ui/Sheet.test.tsx`. The `motion/react` drag-to-dismiss stays.
+
+**Completed fixture cards** dropped whole-card `opacity-60` (which pushed already-small text below comfortable contrast — the exact thing this item was raising floors to fix) for a subtle `bg-surface-hover/40` tint; the existing "Completed" badge already carries the status signal.
+
+**Admin `alert()`** — already gone. Item #8 replaced both admin free-text date inputs with native `<input type="date">`, removing the only `alert()` in the app; a fresh grep confirmed zero `alert(` calls remain, so this checklist item was already satisfied.
+
+Full test matrix: 103 unit/component tests (was 92 — +7 `shortPlayerName`, +5 `Sheet` a11y, dashboard surname assertions updated), 8/8 Playwright E2E green against the emulator (draft flow, Squad Room surnames, leaderboard, visibility all unaffected), `npm run build`/`lint`/`tsc --noEmit` clean. `firestore.rules` untouched — **no `firebase deploy` needed**; app code deploys via `vercel --prod`.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

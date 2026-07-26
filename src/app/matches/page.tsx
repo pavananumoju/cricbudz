@@ -129,7 +129,7 @@ export default function MatchesPage() {
                   transition={{ delay: Math.min(idx, 6) * 0.04 }}
                 >
                   <Link href={`/matches/${match.id}`}>
-                    <Card className={cn('p-4 active:scale-[0.99] transition-transform', isCompleted && 'opacity-60')}>
+                    <Card className={cn('p-4 active:scale-[0.99] transition-transform', isCompleted && 'bg-surface-hover/40')}>
                       {(isCompleted || isLocked) && (
                         <div className="flex justify-end mb-2 -mt-1">
                           <Badge variant={isCompleted ? 'neutral' : 'danger'}>
@@ -152,7 +152,7 @@ export default function MatchesPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] font-bold text-muted">
+                      <div className="flex items-center justify-between text-meta font-bold text-muted">
                         <span className="flex items-center gap-1.5">
                           <Calendar size={12} className="text-primary" />
                           {match.date
