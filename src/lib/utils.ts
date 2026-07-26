@@ -1,5 +1,19 @@
 import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// Our @theme (globals.css) adds custom font-size tokens `text-meta` (12px) and
+// `text-micro` (11px). Stock tailwind-merge doesn't know these are font-sizes,
+// so it treats e.g. `text-micro` as a text *color* and drops it when merged
+// with a real color like `text-muted` — silently reverting the label to the
+// 16px browser default (this is what blew up the bottom-nav labels). Register
+// them in the font-size group so merging keeps both the size and the color.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["meta", "micro"] }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

@@ -9,6 +9,19 @@ describe('cn', () => {
   it('drops falsy values', () => {
     expect(cn('a', false, undefined, null, 'b')).toBe('a b');
   });
+
+  // Regression: our custom `text-meta`/`text-micro` font-size tokens must be
+  // recognized as font-sizes, not colors — otherwise tailwind-merge drops them
+  // when combined with a text color and the element reverts to the 16px default
+  // (this is what broke the bottom-nav labels and draft screens).
+  it('keeps custom font-size tokens when merged with a text color', () => {
+    expect(cn('text-micro', 'text-muted')).toBe('text-micro text-muted');
+    expect(cn('text-meta', 'text-success')).toBe('text-meta text-success');
+  });
+
+  it('still resolves conflicts between two custom font-size tokens', () => {
+    expect(cn('text-micro', 'text-meta')).toBe('text-meta');
+  });
 });
 
 describe('getMatchTimeStatus', () => {
