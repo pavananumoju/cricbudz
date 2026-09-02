@@ -41,7 +41,6 @@ import { AuthProvider } from "@/context/AuthContext";
 import { DevProvider } from "@/context/DevContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import NavigationWrapper from "@/components/NavigationWrapper";
-import { DevOverrideBanner } from "@/components/DevOverrideBanner";
 import { Toaster } from "sonner";
 
 // Prevents a flash of the wrong theme on first paint: this inline script
@@ -74,7 +73,6 @@ export default function RootLayout({
         <ThemeProvider>
           <DevProvider>
             <AuthProvider>
-              <DevOverrideBanner />
               <NavigationWrapper>{children}</NavigationWrapper>
               <Toaster
                 position="top-center"

@@ -15,14 +15,20 @@ const navLinks = [
   { href: '/rules', icon: BookOpen, label: 'Rules' },
 ];
 
-export function TopBar() {
+export function TopBar({ bannerActive = false }: { bannerActive?: boolean }) {
   const { user } = useAuth();
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-b border-border pt-safe">
+      <header
+        className={cn(
+          'fixed left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-b border-border pt-safe',
+          // Pushed down by the DevOverrideBanner's height when it's showing.
+          bannerActive ? 'top-9' : 'top-0'
+        )}
+      >
         <div className="max-w-md md:max-w-2xl lg:max-w-5xl mx-auto h-14 px-4 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center -rotate-3">

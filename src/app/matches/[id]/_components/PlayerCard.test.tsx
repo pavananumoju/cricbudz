@@ -35,9 +35,15 @@ describe('PlayerCard', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('renders the player name and price', () => {
+  it('renders the player name and role', () => {
     render(<PlayerCard player={player} brand={brand} isSelected={false} onSelect={vi.fn()} />);
     expect(screen.getByText('Virat Kohli')).toBeInTheDocument();
-    expect(screen.getByText('₹10.5M')).toBeInTheDocument();
+    expect(screen.getByText('BATSMAN')).toBeInTheDocument();
+  });
+
+  it('does not render a price/currency value (no budget mechanic exists — AUDIT.md P1-1)', () => {
+    render(<PlayerCard player={player} brand={brand} isSelected={false} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/10\.5M/)).not.toBeInTheDocument();
   });
 });

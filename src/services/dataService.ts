@@ -14,7 +14,7 @@ import {
 import { db, auth } from '@/lib/firebase';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
 import { CRICKET_CONFIG } from '@/config/cricket';
-import { ApiError } from '@/lib/errors';
+import { ApiError, withTimeout, READ_TIMEOUT_MS } from '@/lib/errors';
 
 // The season's first synced match's date — used to number leaderboard
 // weeks ("Week 1", "Week 2", ...) relative to when the season actually
@@ -31,7 +31,7 @@ export async function getEarliestMatchDate(): Promise<string | null> {
     orderBy('date', 'asc'),
     limit(1)
   );
-  const snap = await getDocs(q);
+  const snap = await withTimeout(getDocs(q));
   if (snap.empty) return null;
   return (snap.docs[0].data() as Match).date;
 }
@@ -46,7 +46,7 @@ export async function getMatches(): Promise<Match[]> {
     orderBy('date', 'asc')
   );
 
-  const snap = await getDocs(q);
+  const snap = await withTimeout(getDocs(q));
 
   return snap.docs.map(
     d => d.data() as Match
@@ -56,9 +56,9 @@ export async function getMatches(): Promise<Match[]> {
 export async function getMatchById(
   id: string
 ): Promise<Match | undefined> {
-  const snap = await getDoc(
+  const snap = await withTimeout(getDoc(
     doc(db, 'matches', id)
-  );
+  ));
 
   if (snap.exists()) {
     return snap.data() as Match;
@@ -82,10 +82,10 @@ export async function getPlayersByTeams(
     where('team', '==', team2)
   );
 
-  const [s1, s2] = await Promise.all([
+  const [s1, s2] = await withTimeout(Promise.all([
     getDocs(q1),
     getDocs(q2),
-  ]);
+  ]));
 
   return [
     ...s1.docs.map(d => {
@@ -159,7 +159,7 @@ export async function getUserSquads(): Promise<UserSquad[]> {
   if (!userId) return [];
 
   const q = query(collection(db, 'userSquads'), where('userId', '==', userId));
-  const snap = await getDocs(q);
+  const snap = await withTimeout(getDocs(q));
   return snap.docs.map(d => d.data() as UserSquad);
 }
 
@@ -179,6 +179,7 @@ export async function getSquadsForMatch(matchId: string): Promise<UserSquad[]> {
   const token = await user.getIdToken();
   const res = await fetch(`/api/matches/${matchId}/squads`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
   });
   if (!res.ok) throw new ApiError(`GET /api/matches/${matchId}/squads failed: ${res.status}`, res.status);
   const data = (await res.json()) as { squads: UserSquad[] };
@@ -199,6 +200,7 @@ export async function getSquadsInDateRange(startDay: string, endDay: string): Pr
   const token = await user.getIdToken();
   const res = await fetch(`/api/leaderboard?startDay=${startDay}&endDay=${endDay}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
   });
   if (!res.ok) throw new ApiError(`GET /api/leaderboard failed: ${res.status}`, res.status);
   const data = (await res.json()) as { squads: UserSquad[] };
@@ -206,7 +208,7 @@ export async function getSquadsInDateRange(startDay: string, endDay: string): Pr
 }
 
 export async function getVisibilitySettings(): Promise<VisibilitySettings | null> {
-  const snap = await getDoc(doc(db, 'settings', 'visibility'));
+  const snap = await withTimeout(getDoc(doc(db, 'settings', 'visibility')));
   return snap.exists() ? (snap.data() as VisibilitySettings) : null;
 }
 

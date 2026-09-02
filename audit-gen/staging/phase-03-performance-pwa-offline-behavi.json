@@ -1,0 +1,55 @@
+{
+  "phase_number": 3,
+  "phase_title": "Performance & PWA/Offline Behavior",
+  "findings": [
+    {
+      "local_id": "phase03-001",
+      "category": "Performance (INP)",
+      "severity": "P1",
+      "finding": "On the trio-draft arena (src/app/matches/[id]/page.tsx + _components/PlayerCard.tsx), selecting/deselecting any player or tagging MVP re-renders every PlayerCard in both team rosters, not just the touched one. PlayerCard is not wrapped in React.memo, the `onSelect`/`isSelected` props passed from page.tsx are freshly-created inline arrow functions and `.find()` lookups on every parent render (`onSelect={() => selectPlayer(player)}`, `isSelected={!!selectedPlayers.find(p => p.id === player.id)}`), and `selectPlayer`/`removePlayer`/`handleSetMvp` all call `setSelectedPlayers`/`setMvpId` on the full page component. Since a roster is typically ~22-30 players across both teams, every tap re-executes render work for the whole list — exactly the kind of interaction-cost problem that fails INP (2026 pass bar: INP <= 200ms at the 75th percentile; this is the metric most mobile origins still fail).",
+      "notes": "Confirmed via grep: zero occurrences of React.memo/useMemo/useCallback anywhere under src/app/matches, and zero `memo(` calls in the entire src tree. Fix: wrap PlayerCard (and SelectedSlots) in React.memo, memoize onSelect with useCallback (using a functional state update so it doesn't need selectedPlayers in its dependency array), and replace the O(n) `.find()` per card with a Set/Map lookup built once per render of the parent."
+    },
+    {
+      "local_id": "phase03-002",
+      "category": "PWA/Offline",
+      "severity": "P1",
+      "finding": "The known, already-documented no-service-worker gap has a concrete worst-case failure mode specific to this app's real usage pattern (checking the app on venue/stadium wifi during a live match): a user opening a match's draft page for the first time in that session (no matches/players yet cached in IndexedDB for that specific match/team) will, if connectivity drops mid-load, see the full-screen spinner (src/app/matches/[id]/page.tsx's `loading` branch) with no guarantee it ever resolves — there is no AbortController, fetch/read timeout, or `navigator.onLine`/online-offline listener anywhere in the codebase (confirmed via grep across dataService.ts and every page), so nothing ever flips the state to show ErrorState's 'Couldn't Load / check your connection' message. The spinner can simply spin forever with zero indication the app is stuck versus just slow.",
+      "notes": "This is worse than the 'blank/broken page' the research notes speculated: it's an indefinite loading spinner with no offline signal at all. Compounding factor: src/lib/firebase.ts sets `experimentalForceLongPolling: true`, which is known to make the Firestore Web SDK slower to detect a genuine network drop (long-polling reconnect/backoff takes longer than native WebChannel to notice the connection is gone) before it would even attempt to fall back to any cached data it does have — so even the IndexedDB persistence layer's resilience kicks in later than it otherwise would. Recommend at minimum a client-side timeout (e.g. Promise.race with a ~10s cutoff) on the draft/leaderboard/matches fetches that surfaces ErrorState instead of leaving the spinner indefinite, and/or a simple `navigator.onLine` check to show 'You're offline' proactively — this is a small, targeted fix, not a full service-worker rebuild."
+    },
+    {
+      "local_id": "phase03-003",
+      "category": "PWA/Offline",
+      "severity": "P2",
+      "finding": "/leaderboard has strictly worse offline resilience than /dashboard, /matches, and the draft page, and it's one of the pages most likely to be re-checked repeatedly during a live match. Dashboard/matches/draft read `matches`/`players`/`userSquads` directly via the Firestore client SDK (src/services/dataService.ts's getMatches/getMatchById/getPlayersByTeams/getUserSquads), so they can benefit from `persistentLocalCache`'s IndexedDB fallback for previously-synced data. The leaderboard instead exclusively calls `getSquadsInDateRange()`, which goes through a plain `fetch('/api/leaderboard')` (src/services/dataService.ts) with zero client-side caching — a connectivity drop fails immediately with no stale-but-usable fallback, unlike its sibling pages which may still show last-known data for a match/roster already viewed this session.",
+      "notes": "Not confusing (the leaderboard's error path does show the generic ErrorState 'check your connection' message with a retry button), just inconsistent: the one page users refresh most during a live match to watch standings move has none of the offline resilience the rest of the app gets almost for free from the Firestore client SDK's cache. This asymmetry exists because the visibility-toggle policy can't be proven by Firestore rules for range queries (documented, legitimate reason for going through an API route) — but it's worth being aware the tradeoff also cost the leaderboard its cache fallback, not just its direct-query capability."
+    },
+    {
+      "local_id": "phase03-004",
+      "category": "Performance (LCP/Images)",
+      "severity": "P2",
+      "finding": "Team logos on /matches (src/app/matches/page.tsx) and /dashboard (src/app/dashboard/page.tsx) are rendered with raw `<img>` tags (each with an `eslint-disable-next-line @next/next/no-img-element` comment) instead of next/image, on exactly the two pages the audit brief flags as the most first-load-heavy / most likely to contain the LCP element (a user opening the app to check today's match). This bypasses Next's automatic resizing, format conversion (WebP/AVIF), and lazy-loading-below-the-fold for every match card in a season-length fixture list.",
+      "notes": "Root cause looks deliberate: getTeamLogo() (src/lib/utils.ts) falls back to `https://ui-avatars.com/api/?name=...` for any team code without a hardcoded logo entry, and `ui-avatars.com` is not in next.config.ts's `images.remotePatterns` allowlist (only static.cricbuzz.com, www.cricbuzz.com, img1.hscicdn.com, i.cricketcb.com, picsum.photos are listed) — next/image would throw for that host. Since all 10 known IPL team codes' logos and any `logoId`-based URL already resolve to the allow-listed static.cricbuzz.com host, the fix is to use next/image for those cases and only fall back to a plain `<img>` (or add ui-avatars.com to remotePatterns) for the rare unknown-team-code branch, rather than opting the whole logo out of optimization. No CLS results from this today since the `<img>` tags carry fixed `w-12 h-12` (etc.) Tailwind classes that reserve box dimensions regardless of image-load timing."
+    },
+    {
+      "local_id": "phase03-005",
+      "category": "Performance (Bundle/Loading)",
+      "severity": "P2",
+      "finding": "/dashboard, /matches, /leaderboard, and /matches/[id] are all `'use client'` for their entire page component, with no server-rendered initial content — first paint on these routes is gated behind: JS bundle download/parse/execute, Firebase app + Firestore client SDK initialization, Firebase Auth state resolution (dashboard specifically waits on `onAuthStateChanged`), and then a client-side Firestore read, before any real content (today's match, fixtures, standings) appears. This directly affects LCP on the two screens the audit brief identifies as highest-traffic for a user just opening the app to check today's match.",
+      "notes": "This is a direct consequence of the documented architectural choice to route all reads through the Firestore client SDK (CLAUDE.md), so it isn't a bug to trivially patch, but it is a real, measurable LCP cost worth naming explicitly rather than assuming the client-SDK choice is free performance-wise. A lower-effort partial mitigation than a full SSR rework: render the static header/chrome (title, nav) as server-rendered markup and keep only the data-dependent sections behind the client fetch, so the shell paints immediately instead of waiting behind Firebase init."
+    },
+    {
+      "local_id": "phase03-006",
+      "category": "Performance (Firestore reads)",
+      "severity": "P3",
+      "finding": "getPlayersByTeams(team1, team2) in src/services/dataService.ts issues two separate Firestore queries (one `where('team','==',team1)`, one for team2) via Promise.all, instead of a single `where('team','in',[team1,team2])` query. This doubles the number of query round-trips on the draft page, which is opened on every squad edit and is the app's highest-traffic authenticated page during a live match window.",
+      "notes": "Low severity given IPL's small squad sizes (~15-25 players per team) keep both queries cheap in absolute terms, and Firestore's `in` operator supports up to 30 values, comfortably covering the 2-team case — a straightforward one-query consolidation, not urgent."
+    },
+    {
+      "local_id": "phase03-007",
+      "category": "Performance (Firestore reads)",
+      "severity": "P3",
+      "finding": "getMatches() (src/services/dataService.ts) fetches the entire current season's `matches` collection with no `limit()`, and both /dashboard and /matches independently call it fresh on every mount with no shared request cache (no SWR/React Query/equivalent) — navigating dashboard -> matches -> dashboard re-issues the full-collection read each time rather than reusing an already-fetched result.",
+      "notes": "Not egregious today (~74 IPL matches with modest field counts per document), and the Firestore client SDK's persistentLocalCache does give repeat reads some IndexedDB-backed cost reduction — but as a friend group's season history accumulates across years (season rollover keeps prior-season matches in the same collection, per CLAUDE.md) this collection only grows, and there's currently no page-level or React-level memoization preventing redundant reads when a user bounces between dashboard/matches/leaderboard repeatedly during a live match, which is exactly the usage pattern this audit was asked to consider."
+    }
+  ]
+}

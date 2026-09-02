@@ -1,0 +1,83 @@
+{
+  "phase_number": 1,
+  "phase_title": "UI/UX & Visual Design",
+  "findings": [
+    {
+      "local_id": "phase01-001",
+      "category": "Dead/Half-Wired Mechanic",
+      "finding": "src/app/matches/[id]/_components/PlayerCard.tsx:89 renders `₹{player.price.toFixed(1)}M` next to every player — real-money-styled formatting (currency symbol + 'M' for millions) that visually reads exactly like a Dream11/FPL auction budget. But per CLAUDE.md and confirmed by grep, `price` is a value randomized at sync time (`src/app/api/sync/route.ts:229`, `8 + Math.random() * 3`) and is never read by `src/lib/draftRules.ts` (no budget cap, no running total) or by scoring — it is purely decorative and meaningless.",
+      "severity": "P1",
+      "notes": "Verified inert: grep for `.price` usage across src/ shows only the display line, the sync randomization, and two `dataService.ts` pass-throughs — no validation or scoring logic ever reads it. This is the exact 'half-visible unused mechanic' risk flagged as worth checking: a friend drafting a trio will reasonably read the ₹ price as a budget constraint that doesn't exist, and may deliberately avoid a player thinking they 'can't afford' them. Suggested fix: either remove the price display entirely, or relabel it as flavor-only stat (drop the ₹/M formatting) so it can't be mistaken for a spendable budget."
+    },
+    {
+      "local_id": "phase01-002",
+      "category": "UI/UX",
+      "finding": "src/app/matches/[id]/page.tsx computes `isLocked`/`isCompleted` once per render from `getMatchTimeStatus(match.date, getEffectiveNow())`, and nothing on the page re-renders on a timer (no `setInterval`/polling `useEffect` exists anywhere in the file or in `DevContext.tsx`). A user who has the draft page open in the background and idle while the 30-minute pre-toss threshold passes will keep seeing the stale 'open' UI (selectable players, visible Save button) until some unrelated state change forces a re-render. If they then tap 'Lock Trio', the client believes it's still allowed and only the server-side Firestore rule blocks the write, surfacing a generic, unexplained toast ('Failed to save your squad. Try again.') instead of an accurate 'the arena just locked' message.",
+      "severity": "P1",
+      "notes": "Confirmed by reading src/context/DevContext.tsx (getEffectiveNow() is a plain function call, no ticking state) and src/app/matches/[id]/page.tsx (timeStatus derived inline in the render body, no interval). This is the highest-stakes screen in the app (players lose their ability to submit with zero warning). Suggested fix: a lightweight `setInterval` (e.g. every 15-30s) that forces a re-render near the lock boundary, plus surfacing the specific 'arena locked while you were deciding' case distinctly from a generic save failure."
+    },
+    {
+      "local_id": "phase01-003",
+      "category": "UI/UX",
+      "finding": "There is no per-match lock-time or countdown indicator anywhere in the UI (checked matches/page.tsx, matches/[id]/page.tsx, dashboard/page.tsx) — the only place the '30 minutes before match start' rule is stated in text at all is the separate /rules page. On the fixture list and draft screen, status flips abruptly from open to a plain 'Locked' badge/banner with no advance warning (e.g. no 'locks in 12 min' countdown) and no indication that the lock is tied to *scheduled* start time rather than the actual toss (which can slip due to rain, etc.).",
+      "severity": "P2",
+      "notes": "Cross-referenced against research notes on Dream11/My11Circle's two-tier deadline pattern — CricBudz's single deadline is an acceptable simplification for a friend group, but the total absence of a lead-time warning (vs. just a binary flip) increases the odds of someone losing last-minute edit intent, especially combined with phase01-002. Suggested fix: a simple 'Locks at 7:00 PM IST' line on the draft header and fixture cards once within, say, 2 hours of lock."
+    },
+    {
+      "local_id": "phase01-004",
+      "category": "UI/UX",
+      "finding": "src/app/dashboard/page.tsx:290-292 labels any today's-match card that is merely still open for drafting (i.e., `timeStatus === 'open'`, which includes matches many hours away) with a green 'Live' badge (`isCompleted ? 'Completed' : isLocked ? 'Locked' : 'Live'`). 'Live' misleadingly implies the match itself is currently being played, when it actually means 'trio selection is still open, match hasn't started.' The draft page itself (matches/[id]/page.tsx) never uses this label for the same state (it just shows a picks counter), so the mislabeling is specific to the dashboard card and inconsistent with the rest of the app.",
+      "severity": "P1",
+      "notes": "Found by comparing the badge label logic on dashboard/page.tsx against the equivalent status handling in matches/[id]/page.tsx and matches/page.tsx, neither of which uses 'Live' for the open/pre-lock state. Suggested fix: relabel to something like 'Open' or 'Draft Open' to match the actual meaning, reserving 'Live' language (if wanted at all) for a state this app doesn't actually track (no ball-by-ball sync)."
+    },
+    {
+      "local_id": "phase01-005",
+      "category": "Design System Consistency",
+      "finding": "src/components/ui/Badge.tsx:24 hardcodes `text-[10px]` for all badge text instead of using the documented `text-meta`/`text-micro` tokens defined in globals.css. Badge is the app's primary status-communication component (match 'Live'/'Locked'/'Completed', 'MVP' tags, admin 'Admin' role tag) and its text — explicitly the kind of 'status lines' the globals.css comment calls out as needing the 12px floor — renders below even the 11px decorative-micro floor, contradicting the documented legibility-floor fix (audit item #9 referenced in globals.css itself).",
+      "severity": "P2",
+      "notes": "Read globals.css:30-41 (the documented floor: text-meta=12px for informational text including 'status lines', text-micro=11px for decorative-only labels) against Badge.tsx's literal `text-[10px]`. This is the shared component every status badge across dashboard/matches/leaderboard/admin renders through, so the drift is systemic, not a one-off. Suggested fix: change Badge's base class to `text-micro` (or `text-meta` given it communicates match/lock state) and remove the raw arbitrary value."
+    },
+    {
+      "local_id": "phase01-006",
+      "category": "Design System Consistency",
+      "finding": "Numerous CTA buttons and navigation links across the app use raw `text-[10px]` instead of the `text-meta`/`text-micro` tokens: src/components/ui/ErrorState.tsx:27 ('Try Again', used app-wide), src/app/error.tsx:20 ('Try Again'), src/app/dashboard/page.tsx:261 ('Browse Matches'), :349 ('Edit Trio'/'Draft Trio'), :247 ('All' nav link), src/app/matches/[id]/page.tsx:290 ('Back to Fixtures'). These are actionable, read-to-be-tapped button labels — not decorative micro-labels — so per the documented floor they should be at least `text-meta` (12px), yet they're 2px below even the lower `text-micro` floor.",
+      "severity": "P2",
+      "notes": "grep -rn 'text-\\[10px\\]' across src/app and src/components turned up 15 occurrences; the ones listed here are actionable button/link text rather than decorative pills. Suggested fix: sweep these to `text-meta` (they're short enough single-line labels that the extra 1-2px won't break existing layouts) so button copy matches the documented legibility floor exactly like item #9 intended."
+    },
+    {
+      "local_id": "phase01-007",
+      "category": "Accessibility",
+      "finding": "The Badge component's 'danger' and 'success' tint/text color pairs fail WCAG AA contrast for normal text at their current sizes. Computed contrast ratios: danger `#ef4444` text on `danger-tint` `#fef2f2` background (light mode) ≈ 3.44:1; success `#10b981` text on `success-tint` `#ecfdf5` background (light mode) ≈ 2.41:1 — both well under the 4.5:1 AA threshold for normal text, and the 3:1 large-text exception doesn't apply since this is 10-11px text, not large text.",
+      "severity": "P2",
+      "notes": "Computed via standard WCAG relative-luminance formula from the hex values in globals.css:59-67 (light theme tokens). These are the exact colors used by Badge's 'danger'/'success' variants (Locked/Live status badges) and ErrorState's danger styling — compounds with phase01-005/006's undersized text, since small AND low-contrast text is the worst combination for legibility. Suggested fix: darken the text color or lighten/darken the tint background until the pair clears 4.5:1 (e.g. shift danger text toward `#dc2626` or deepen the tint), and re-check the dark-mode pairs too."
+    },
+    {
+      "local_id": "phase01-008",
+      "category": "UI/UX",
+      "finding": "src/components/DevOverrideBanner.tsx renders as a normal (non-fixed, non-z-indexed) block, the first element inside `<body>` in layout.tsx (before NavigationWrapper). src/components/TopBar.tsx is `fixed top-0 ... z-40` with an opaque `bg-surface/90 backdrop-blur-xl` background and total height (safe-area + 56px) that is greater than the banner's own content height. Since both are anchored at the same viewport position (y=0) and TopBar has a higher effective stacking (fixed + opaque + higher paint order) and no top offset accounts for the banner's height in NavigationWrapper's `pt-14` content wrapper, the banner is very likely rendered entirely underneath the fixed TopBar and invisible whenever the global chrome is shown — which is the majority of the app's screens.",
+      "severity": "P2",
+      "notes": "Based on static analysis of the layout stacking (layout.tsx:73-90, TopBar.tsx:25, DevOverrideBanner.tsx:19) — not visually confirmed in a browser, but the CSS positioning math is unambiguous. This directly undermines the component's own documented purpose ('Surfaces an active Dev Control Center date override on every page... Without this, an override left on from a prior testing session is invisible'). Suggested fix: give NavigationWrapper's content wrapper conditional extra top padding when the banner is active, or move the banner to render after/within TopBar with a lower `top` offset so it doesn't collide."
+    },
+    {
+      "local_id": "phase01-009",
+      "category": "Empty/Loading/Error States",
+      "finding": "src/app/admin/page.tsx is the one page in the app that doesn't follow the Skeleton/ErrorState pattern used everywhere else (dashboard, matches, matches/[id], leaderboard all use `<Skeleton>` for loading and `<ErrorState onRetry=.../>` for failures). Admin instead uses plain `<p>Loading...</p>` text for all three of its data-driven sections, and two of its fetches have no error-state UI at all: `getVisibilitySettings()` (page.tsx:46-50) has no `.catch()`, so a rejected promise leaves `visLoading` stuck `true` forever with no retry affordance; `loadUsers()` (page.tsx:54-73) on failure only fires a toast and leaves `users` as an empty array, so the UI then renders 'No registered users yet.' — a genuine fetch failure disguised as a legitimate empty state.",
+      "severity": "P1",
+      "notes": "Compared admin/page.tsx's three data sections against the Skeleton+ErrorState pattern in dashboard/page.tsx, matches/page.tsx, and leaderboard/page.tsx. The 'No registered users yet.' silent-failure case is the most concrete bug — an admin who hits a transient network error while loading /admin has no way to tell 'nobody has signed up' apart from 'the request failed', and no retry button. Suggested fix: reuse ErrorState + a retry token for both the visibility-settings and users fetches, matching the rest of the app."
+    },
+    {
+      "local_id": "phase01-010",
+      "category": "Accessibility",
+      "finding": "The delete-draft icon button on the dashboard's 'Other Drafts' card (src/app/dashboard/page.tsx:434-447) is only `py-1.5` (6px) padding around an 11px trash icon when not in its 'Confirm?' state, giving it an effective tap target height of roughly 23px — just under the WCAG 2.2 2.5.8 AA minimum of 24×24 CSS px for interactive targets.",
+      "severity": "P3",
+      "notes": "Measured from the Tailwind classes directly (`px-2.5 py-1.5` + `size={11}` icon, no min-height set). Low severity given this is a secondary, infrequently-used action (deleting an unsubmitted draft) in a small trusted friend group on mostly-larger phone screens, but a one-line `min-h-6` fix removes the risk entirely."
+    },
+    {
+      "local_id": "phase01-011",
+      "category": "UI/UX",
+      "finding": "The weekly leaderboard (/leaderboard, src/lib/leaderboard.ts) shows only the current week's absolute standing — no week-over-week rank movement/delta (e.g. '↑2' or '— unchanged') is computed or displayed anywhere in `computeStandings`/`StandingsEntry` or the page render.",
+      "severity": "P3",
+      "notes": "This is flagged as a low-priority gap only, per the audit brief — CricBudz deliberately dropped FPL-style complexity, and a static per-week standing is a reasonable, intentional simplification for a small friend-group leaderboard rather than an oversight. Worth considering only if the group later wants more 'sticky' week-to-week narrative (a common driver of FPL mini-league engagement)."
+    }
+  ]
+}

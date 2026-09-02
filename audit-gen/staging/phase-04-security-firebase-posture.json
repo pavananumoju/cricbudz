@@ -1,0 +1,34 @@
+{
+  "phase_number": 4,
+  "phase_title": "Security & Firebase Posture",
+  "findings": [
+    {
+      "local_id": "phase04-001",
+      "category": "Security",
+      "severity": "P2",
+      "finding": "GET /api/admin/backup (src/app/api/admin/backup/route.ts:10,19-26) exports the entire `userSquads` collection unconditionally via the Admin SDK, with no visibility-toggle filtering applied. Any admin can hit the 'Data Backup' button on /admin during an active `hideUntilToss` window and download every other player's not-yet-visible trio picks in the JSON export, fully defeating the anti-copying visibility toggle for that admin.",
+      "notes": "Confirmed by reading firestore.rules (no isAdmin() bypass exists on the userSquads read rule itself — admins get no special client-side read access to others' pre-toss squads) alongside the backup route, which uses getAdminDb() (Admin SDK, bypasses all Firestore rules) and does `adminDb.collection('userSquads').get()` with zero filtering. Since this is a small friend-group app, the 'admin' role is very plausibly held by someone who is also a competing player, making this a real (if self-inflicted, single-actor) way to defeat the toggle's entire purpose. Not documented as an intended admin capability anywhere in CLAUDE.md/README.md. Fix: filter the userSquads export in the backup route the same way /api/matches/[matchId]/squads does (own squad, or toss passed, or visibility not active for that day), or explicitly document this as an accepted admin-trust tradeoff if intentional."
+    },
+    {
+      "local_id": "phase04-002",
+      "category": "Security",
+      "severity": "P2",
+      "finding": "POST /api/admin/users (src/app/api/admin/users/route.ts:32-61) revokes a user's admin custom claim via `setCustomUserClaims(uid, { admin: false })` (line 51) but never calls `getAdminAuth().revokeRefreshTokens(uid)`. Firebase ID tokens remain valid and still carry the old `admin: true` claim for up to ~1 hour after issuance (until the token naturally expires/refreshes), so a just-demoted admin retains full working access to every requireAdmin-gated route (sync, finalize-match, admin/users, admin/backup) for up to an hour after being revoked.",
+      "notes": "Verified by grepping the whole repo for `revokeRefreshTokens`/`tokensValidAfterTime`/`forceRefresh` — zero matches anywhere. Confirmed against current Firebase documentation: custom claims only propagate on next token issuance (sign-in, natural refresh, or an explicit forced client refresh), and revokeRefreshTokens() is the documented mechanism to force that immediately. Fix: after setCustomUserClaims in the isAdmin===false branch, call `await getAdminAuth().revokeRefreshTokens(uid)` to invalidate the demoted user's existing sessions immediately."
+    },
+    {
+      "local_id": "phase04-003",
+      "category": "Security",
+      "severity": "P3",
+      "finding": "No Firebase App Check integration and no rate limiting exist anywhere in the codebase (no middleware.ts, no rate-limit library in package.json, no App Check init in src/lib/firebase.ts or firebase-admin.ts). Every API route — including /api/sync, which calls the metered third-party RapidAPI Cricbuzz endpoint on every invocation — is protected only by the Bearer-token check in requireAdmin/requireAuth, with no request-volume ceiling of any kind.",
+      "notes": "Confirmed via `find` for middleware.ts (none), grep for app-check/rate-limit/ratelimit across src and package.json (no matches), and reading next.config.ts (no headers/rewrites config either). Cross-checked against current (2026) Firebase and Next.js guidance: App Check is now treated as a baseline abuse-prevention layer independent of security rules, and rate-limiting authenticated routes (not just public ones) is standard advice since serverless invocations cost money regardless of auth state. Given this is a small, trusted, invite-only friend group, actual exploitation likelihood is low — this is a defense-in-depth gap, not an active vulnerability. A buggy client-side retry loop or a compromised friend's session token is the realistic failure mode (RapidAPI quota burn via /api/sync, or elevated Firestore read costs via the auth-only /api/leaderboard and /api/matches/[id]/squads). Fix: add basic per-route rate limiting (even a simple in-memory token bucket keyed by uid is enough at this scale) to /api/sync at minimum; App Check is a reasonable longer-term addition but not urgent for this user base."
+    },
+    {
+      "local_id": "phase04-004",
+      "category": "Security",
+      "severity": "P3",
+      "finding": "firestore.rules' isVisibilityHiddenForDay() (used by the userSquads single-document read rule) compares against `resource.data.matchDay`, which per CLAUDE.md's documented design is stored as a UTC-day slice of matchTimestamp, not an IST day. The two API-route reimplementations of the same policy (GET /api/matches/[matchId]/squads and the leaderboard route) instead compute matchDay fresh via getMatchDayIST(match.date) — genuinely IST-anchored, matching what the admin actually selects in the visibility-toggle date picker. If a real IPL match were ever scheduled at a UTC hour that crosses the UTC/IST day boundary (currently never happens — real matches start 10:00/14:00 UTC only, per CLAUDE.md), the rules-path comparison and the API-route-path comparison would silently diverge for that one match's squads.",
+      "notes": "This is a latent inconsistency, not a live exploit: grepped the whole client codebase for any direct single-document Firestore read of another user's userSquads doc (e.g. getDoc(doc(db,'userSquads', otherId))) and found none — the client SDK is only ever used for a user's own squads (setDoc/deleteDoc/query by own userId). All other-user squad reads go exclusively through the two API routes, which compute matchDay correctly in IST and don't rely on the stored UTC-sliced field at all. So today there is no reachable path where this divergence actually leaks a hidden squad. It's worth flagging because it's a trap for future development: the natural next feature (a direct single-squad Firestore read, bypassing the API route) would silently inherit this bug. Already partially acknowledged as an intentional design tradeoff in CLAUDE.md's 'What day is this' section, but that section doesn't call out the visibility-toggle read-rule interaction specifically. No code change needed today; worth a one-line comment in firestore.rules cross-referencing this constraint for future readers."
+    }
+  ]
+}

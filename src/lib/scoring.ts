@@ -18,15 +18,23 @@ export function emptyStats(): RawPlayerStats {
 // Cricbuzz add new fields freely without breaking us — we only care if a
 // field we *depend on* goes missing or changes type, which is exactly what
 // this schema catches with a clear error instead of a silent wrong score.
+//
+// AUDIT.md P0-2: these used to be `.optional()`, which defeated the whole
+// fail-loud design — a renamed/dropped `scorecard`, `runs` or `wickets`
+// still validated clean and every player silently scored 0. The three the
+// parser reads unconditionally are now required. `dots` stays optional on
+// purpose: CLAUDE.md notes real dot-ball data is unreliable/often absent,
+// and a rename there only forfeits the minor dot-ball bonus — not worth
+// risking a false 502 on legitimate data.
 const ScorecardBatsmanSchema = z.object({
   name: z.string(),
-  runs: z.number().optional(),
+  runs: z.number(),
   outdec: z.string().optional(),
 }).passthrough();
 
 const ScorecardBowlerSchema = z.object({
   name: z.string(),
-  wickets: z.number().optional(),
+  wickets: z.number(),
   dots: z.number().optional(),
 }).passthrough();
 
@@ -36,7 +44,7 @@ const ScorecardInningsSchema = z.object({
 }).passthrough();
 
 export const ScorecardResponseSchema = z.object({
-  scorecard: z.array(ScorecardInningsSchema).optional(),
+  scorecard: z.array(ScorecardInningsSchema),
   ismatchcomplete: z.boolean().optional(),
 }).passthrough();
 
@@ -128,6 +136,18 @@ function addUnmatched(list: string[], name: string) {
   if (!list.includes(name)) list.push(name);
 }
 
+// Cricbuzz writes a substitute fielder's dismissal as "c sub (Real Name) b
+// Bowler" (also seen: "sub [Real Name]"). Without stripping that wrapper the
+// captured fielder text is "sub (real name)" — matches neither the full-name
+// map nor the surname fallback (lastWord -> "name)"), so a legitimate catch
+// by a synced impact/concussion sub was always silently dropped. (AUDIT.md P2-13.)
+function cleanFielderName(raw: string): string {
+  let s = raw.trim();
+  s = s.replace(/^sub\s*/i, '');
+  s = s.replace(/^[([{](.*)[)\]}]$/, '$1');
+  return s.trim();
+}
+
 function creditFielder(
   statsById: Map<string, RawPlayerStats>,
   lookup: PlayerNameLookup,
@@ -135,9 +155,10 @@ function creditFielder(
   kind: 'catches' | 'runouts' | 'stumpings',
   unmatched: UnmatchedReport
 ) {
-  const id = resolvePlayerId(lookup, fielderName);
+  const cleaned = cleanFielderName(fielderName);
+  const id = resolvePlayerId(lookup, cleaned);
   if (!id) {
-    addUnmatched(unmatched.fielders, fielderName);
+    addUnmatched(unmatched.fielders, cleaned);
     return;
   }
   const stats = statsById.get(id) ?? emptyStats();

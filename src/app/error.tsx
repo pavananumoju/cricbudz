@@ -17,7 +17,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       </p>
       <button
         onClick={reset}
-        className="bg-foreground text-background px-5 py-2.5 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+        className="bg-foreground text-background px-5 py-2.5 rounded-xl font-display font-black text-meta uppercase tracking-tight"
       >
         Try Again
       </button>

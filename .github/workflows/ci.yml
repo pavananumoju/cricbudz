@@ -1,0 +1,49 @@
+# AUDIT.md P1-13: nothing ran lint/typecheck/tests/build automatically before
+# this — a fix once sat committed-but-unpushed for a day with prod on old code
+# (PROGRESS.md). This runs the fast checks on every push/PR, plus the Firestore
+# rules suite (which needs JDK 21, see AUDIT.md P2-18) as a separate job.
+# Playwright E2E (`npm run test:e2e`) is still manual: it needs the emulator +
+# a dev server + browser downloads and was judged not worth the CI minutes yet.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run test
+      - run: npm run build
+
+  rules-tests:
+    name: firestore rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm install -g firebase-tools
+      - run: npm run test:rules

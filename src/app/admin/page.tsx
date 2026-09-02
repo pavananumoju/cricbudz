@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { getVisibilitySettings, setVisibilitySettings } from '@/services/dataService';
 import { cn, getMatchDayIST } from '@/lib/utils';
 
@@ -19,6 +20,24 @@ interface AdminUser {
   email: string | null;
   displayName: string | null;
   isAdmin: boolean;
+}
+
+// Compact in-card failure state with a retry, so a failed admin fetch never
+// silently shows a stuck "Loading..." or an empty list that looks like real
+// "nobody's here" data. (AUDIT.md P1-4.)
+function InlineError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-danger/30 bg-danger-tint/40 px-4 py-6 text-center">
+      <AlertCircle size={18} className="text-danger/70 mx-auto mb-2" />
+      <p className="text-meta text-muted mb-3">Couldn&apos;t load this. Check your connection and try again.</p>
+      <button
+        onClick={onRetry}
+        className="bg-foreground text-background px-4 py-2 rounded-xl font-display font-black text-meta uppercase tracking-tight"
+      >
+        Try Again
+      </button>
+    </div>
+  );
 }
 
 export default function AdminPage() {
@@ -30,10 +49,13 @@ export default function AdminPage() {
   const [visEnabled, setVisEnabled] = useState(false);
   const [visDate, setVisDate] = useState('');
   const [visLoading, setVisLoading] = useState(true);
+  const [visError, setVisError] = useState(false);
+  const [visRetry, setVisRetry] = useState(0);
   const [visSaving, setVisSaving] = useState(false);
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState(false);
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState(false);
 
@@ -43,16 +65,34 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    getVisibilitySettings().then((settings) => {
-      setVisEnabled(settings?.hideUntilToss ?? false);
-      setVisDate(settings?.date || getMatchDayIST(getEffectiveNow()));
-      setVisLoading(false);
-    });
+    let cancelled = false;
+    setVisLoading(true);
+    setVisError(false);
+    getVisibilitySettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setVisEnabled(settings?.hideUntilToss ?? false);
+        setVisDate(settings?.date || getMatchDayIST(getEffectiveNow()));
+      })
+      .catch((err) => {
+        // Was uncaught — a rejected promise left visLoading stuck true forever
+        // with no retry affordance. (AUDIT.md P1-4.)
+        if (cancelled) return;
+        console.error(err);
+        setVisError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setVisLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isAdmin, visRetry]);
 
   const loadUsers = async () => {
     setUsersLoading(true);
+    setUsersError(false);
     try {
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/admin/users', {
@@ -62,10 +102,14 @@ export default function AdminPage() {
       if (res.ok) {
         setUsers(data.users);
       } else {
+        setUsersError(true);
         toast.error(data.error || 'Failed to load users.');
       }
     } catch (error) {
+      // Previously only toasted, then fell through to "No registered users yet."
+      // — a fetch failure disguised as a legitimate empty state. (AUDIT.md P1-4.)
       console.error(error);
+      setUsersError(true);
       toast.error('Network error loading users.');
     } finally {
       setUsersLoading(false);
@@ -226,7 +270,12 @@ export default function AdminPage() {
           </div>
 
           {visLoading ? (
-            <p className="text-xs text-muted">Loading...</p>
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-11 w-full rounded-2xl" />
+            </div>
+          ) : visError ? (
+            <InlineError onRetry={() => setVisRetry((n) => n + 1)} />
           ) : (
             <>
               <button
@@ -292,7 +341,12 @@ export default function AdminPage() {
           </div>
 
           {usersLoading ? (
-            <p className="text-xs text-muted">Loading...</p>
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full rounded-2xl" />
+              <Skeleton className="h-16 w-full rounded-2xl" />
+            </div>
+          ) : usersError ? (
+            <InlineError onRetry={loadUsers} />
           ) : users.length === 0 ? (
             <p className="text-xs text-muted">No registered users yet.</p>
           ) : (

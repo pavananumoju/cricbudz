@@ -50,6 +50,17 @@ export async function POST(req: Request) {
 
   await getAdminAuth().setCustomUserClaims(uid, { admin: isAdmin });
 
+  // A custom-claim change only takes effect on the target's *next* ID token
+  // (issued on sign-in or the ~1h natural refresh). Without this, a just-
+  // revoked admin keeps working access to every requireAdmin route for up
+  // to an hour. revokeRefreshTokens forces re-auth immediately; requireAdmin
+  // would need to check auth_time against tokensValidAfterTime for airtight
+  // enforcement, but on this scale forcing the client to re-auth is enough.
+  // (AUDIT.md P2-12.)
+  if (!isAdmin) {
+    await getAdminAuth().revokeRefreshTokens(uid);
+  }
+
   await getAdminDb().collection('auditLog').add({
     action: isAdmin ? 'grant_admin' : 'revoke_admin',
     actorUid: authResult.uid,

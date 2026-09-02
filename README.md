@@ -147,7 +147,8 @@ ipl-fantasy-arena/
 ├── public/
 │   ├── manifest.json                 # PWA manifest
 │   └── icon-*.png                    # PWA icons (placeholder artwork)
-├── CLAUDE.md                         # Instructions/architecture notes for AI coding agents
+├── CLAUDE.md                         # Instructions/architecture notes for AI coding agents (source of truth)
+├── AGENTS.md                         # Thin pointer to CLAUDE.md for other AI agents (Codex etc.)
 ├── PROGRESS.md                       # Standing architecture decisions (scope, DB choice, etc.)
 ├── RUNBOOK.md                        # Plain-English step-by-step maintenance checklist
 └── README.md                         # This file
@@ -166,7 +167,7 @@ ipl-fantasy-arena/
 ## Trio Draft Arena (`/matches/[id]`)
 
 * Exactly 3 players, from exactly 2 teams (not all 3 from one side), one tagged MVP (2x points) before locking.
-* **Squads lock 30 minutes before match start ("toss")** — enforced client-side today (see Known Limitations).
+* **Squads lock 30 minutes before match start ("toss")** — enforced both in the UI *and* server-side by `firestore.rules` (pre-toss write checks, with a cross-read of the real match doc so a client can't spoof the toss time). See the `userSquads` **Write rules** section below for the exact rule logic.
 * Match status is a 3-way state, not just locked/unlocked:
   * **Open** — before the lock window, fully editable.
   * **Locked** — inside the lock window through an assumed ~4h match duration (no live ball-by-ball sync exists, so "in progress" is inferred, not observed). Red banner, grayed player cards, lock icons.

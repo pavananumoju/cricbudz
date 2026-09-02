@@ -60,6 +60,25 @@ describe('creditDismissal', () => {
     expect(stats.get('p-klaasen')?.runouts).toBe(1);
   });
 
+  it('credits a catch taken by a substitute fielder — "c sub (Name) b Bowler" — AUDIT.md P2-13', () => {
+    const stats = new Map();
+    const unmatched = emptyUnmatchedReport();
+    creditDismissal(stats, lookup(), 'c sub (Phil Salt) b Jacob Duffy', unmatched);
+    expect(stats.get('p-salt')?.catches).toBe(1);
+    expect(unmatched.fielders).toEqual([]);
+  });
+
+  it('credits a substitute run-out fielder and drops the "sub (…)" wrapper from an unmatched name — AUDIT.md P2-13', () => {
+    const stats = new Map();
+    const unmatched = emptyUnmatchedReport();
+    creditDismissal(stats, lookup(), 'run out (sub (Ishan Kishan))', unmatched);
+    expect(stats.get('p-kishan')?.runouts).toBe(1);
+
+    const unmatched2 = emptyUnmatchedReport();
+    creditDismissal(new Map(), lookup(), 'c sub (Nobody Synced) b Jacob Duffy', unmatched2);
+    expect(unmatched2.fielders).toEqual(['Nobody Synced']);
+  });
+
   it('awards no fielding credit for a bowled dismissal', () => {
     const stats = new Map();
     creditDismissal(stats, lookup(), 'b Jacob Duffy', emptyUnmatchedReport());
@@ -176,7 +195,7 @@ describe('parseScorecard', () => {
   });
 
   it('returns an empty map for an empty scorecard', () => {
-    expect(parseScorecard({}, lookup()).stats.size).toBe(0);
+    expect(parseScorecard({ scorecard: [] }, lookup()).stats.size).toBe(0);
   });
 
   it('surfaces an unmatched batsman name instead of silently dropping their runs', () => {
@@ -304,9 +323,38 @@ describe('validateScorecardResponse', () => {
   });
 
   it('throws a clear error when the response is a totally different shape', () => {
-    expect(() => validateScorecardResponse({ someUnrelatedApiChange: true })).not.toThrow();
+    // AUDIT.md P0-2: `scorecard` is now required, so a wholesale shape change
+    // (or a rename like `scorecard` -> `scoreCard`) fails loud instead of
+    // silently scoring everyone 0.
+    expect(() => validateScorecardResponse({ someUnrelatedApiChange: true })).toThrow(
+      /scorecard/
+    );
     expect(() => validateScorecardResponse('not even an object')).toThrow(
       /Cricbuzz's scorecard response no longer matches the shape this app expects/
     );
+  });
+
+  it('throws when a batsman row is missing `runs` entirely (not just retyped) — AUDIT.md P0-2', () => {
+    const raw = {
+      scorecard: [{ batsman: [{ name: 'Travis Head' /* runs dropped */ }] }],
+      ismatchcomplete: true,
+    };
+    expect(() => validateScorecardResponse(raw)).toThrow(/scorecard\.0\.batsman\.0\.runs/);
+  });
+
+  it('throws when a bowler row is missing `wickets` entirely — AUDIT.md P0-2', () => {
+    const raw = {
+      scorecard: [{ bowler: [{ name: 'Jasprit Bumrah', dots: 10 /* wickets dropped */ }] }],
+      ismatchcomplete: true,
+    };
+    expect(() => validateScorecardResponse(raw)).toThrow(/scorecard\.0\.bowler\.0\.wickets/);
+  });
+
+  it('still accepts a bowler row with no `dots` (kept optional on purpose) — AUDIT.md P0-2', () => {
+    const raw = {
+      scorecard: [{ bowler: [{ name: 'Jasprit Bumrah', wickets: 3 }] }],
+      ismatchcomplete: true,
+    };
+    expect(() => validateScorecardResponse(raw)).not.toThrow();
   });
 });
