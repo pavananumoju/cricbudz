@@ -47,3 +47,32 @@ jobs:
       - run: npm ci
       - run: npm install -g firebase-tools
       - run: npm run test:rules
+
+  e2e:
+    # Multi-user + single-user Playwright specs against the Firebase emulator
+    # (see e2e/MULTIUSER.md). Slower than the other jobs (~6 min); runs in
+    # parallel with them.
+    name: e2e (emulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm install -g firebase-tools
+      - run: npx playwright install --with-deps chromium
+      - run: firebase emulators:exec --only auth,firestore "npm run test:e2e"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -4,6 +4,13 @@ import { getAuth, Auth } from 'firebase-admin/auth';
 
 function getAdminApp(): App {
   if (getApps().length === 0) {
+    // E2E / emulator: the Admin SDK auto-connects to the emulator from
+    // FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST and needs no
+    // real service-account credentials. Never set in a real deployment.
+    if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+      return initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'demo-cricbudz' });
+    }
+
     const privateKey = process.env.FIREBASE_PRIVATE_KEY;
     if (!privateKey) {
       throw new Error('FIREBASE_PRIVATE_KEY is missing');

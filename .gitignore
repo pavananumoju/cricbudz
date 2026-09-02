@@ -7,6 +7,8 @@ tsconfig.tsbuildinfo
 .vercel
 .env*
 e2e/.tokens.json
+e2e/.sim-tokens.json
+e2e/fixtures/scorecards/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

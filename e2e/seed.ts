@@ -9,7 +9,8 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { writeFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { CRICKET_CONFIG } from '../src/config/cricket';
 import {
   PROJECT_ID,
@@ -26,7 +27,15 @@ import {
   TEST_MATCH_PAST_ID,
   TEST_PLAYERS,
   TOKENS_FILE,
+  SIM_USERS,
+  SIM_ROSTER,
+  SIM_TOKENS_FILE,
+  SIM_MATCH_OPEN_ID,
+  SIM_MATCH_SCORED_ID,
+  SIM_MATCH_SCORED_DAYS_AGO,
+  simTrio,
 } from './testData';
+import { buildSimScorecard } from './simScorecard';
 
 export async function runSeed() {
   const app = getApps().length ? getApps()[0] : initializeApp({ projectId: PROJECT_ID });
@@ -117,11 +126,74 @@ export async function runSeed() {
     },
   });
 
+  // ── Multi-user simulation seed (see e2e/MULTIUSER.md) ──────────────────
+  const simOpenDate = openMatchDate; // same "today, pre-toss" window as TEST_MATCH_ID
+  // Anchor the scored match to 14:00 UTC (19:30 IST) on the IST calendar day
+  // exactly SIM_MATCH_SCORED_DAYS_AGO days back, so its matchDay (a UTC slice)
+  // and IST day agree — like every real IPL match — and "Previous week" x2
+  // from today's IST week always lands on it, regardless of run time.
+  const simScoredISTDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(
+    new Date(now - SIM_MATCH_SCORED_DAYS_AGO * 24 * 60 * 60 * 1000)
+  );
+  const simScoredDate = new Date(`${simScoredISTDay}T14:00:00.000Z`).toISOString();
+  const simScoredDay = simScoredISTDay;
+
+  await db.collection('matches').doc(SIM_MATCH_OPEN_ID).set({
+    id: SIM_MATCH_OPEN_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
+    team1: 'SRH',
+    team2: 'RCB',
+    date: simOpenDate,
+    venue: 'Sim Ground',
+    status: 'UPCOMING',
+    matchDesc: 'Multi-user Sim — Open',
+  });
+  await db.collection('matches').doc(SIM_MATCH_SCORED_ID).set({
+    id: SIM_MATCH_SCORED_ID,
+    seriesId: CRICKET_CONFIG.IPL_SERIES_ID,
+    team1: 'SRH',
+    team2: 'RCB',
+    date: simScoredDate,
+    venue: 'Sim Ground',
+    status: 'COMPLETE',
+    matchDesc: 'Multi-user Sim — Scored',
+    // Deliberately NO `scoring` field: the multi-user spec finalizes this
+    // match itself, exercising the real /api/finalize-match path.
+  });
+
   const batch = db.batch();
   TEST_PLAYERS.forEach((p) => batch.set(db.collection('players').doc(p.id), p));
+  SIM_ROSTER.forEach((p) => batch.set(db.collection('players').doc(p.id), p));
   await batch.commit();
 
-  for (const uid of [TEST_UID, TEST_UID_2, TEST_ADMIN_UID]) {
+  // 10 sim users each get an unscored squad on the scored match (via a
+  // deterministic trio) so the spec can finalize and rank all 10.
+  const simSquadBatch = db.batch();
+  for (const u of SIM_USERS) {
+    const { players, mvpId } = simTrio(u.n);
+    simSquadBatch.set(db.collection('userSquads').doc(`${u.uid}_${SIM_MATCH_SCORED_ID}`), {
+      userId: u.uid,
+      matchId: SIM_MATCH_SCORED_ID,
+      players,
+      playerNames: players.map((id) => SIM_ROSTER.find((p) => p.id === id)!.name),
+      mvpId,
+      createdAt: Date.now(),
+      matchTimestamp: simScoredDate,
+      matchDay: simScoredDay,
+      userDisplayName: u.displayName,
+      userPhotoURL: null,
+    });
+  }
+  await simSquadBatch.commit();
+
+  // The canned scorecard the finalize-match fixture path reads.
+  const scorecardsDir = join('e2e', 'fixtures', 'scorecards');
+  mkdirSync(scorecardsDir, { recursive: true });
+  const scorecardJson = JSON.stringify(buildSimScorecard(), null, 2);
+  writeFileSync(join(scorecardsDir, `${SIM_MATCH_SCORED_ID}.json`), scorecardJson);
+  writeFileSync(join(scorecardsDir, '_default.json'), scorecardJson);
+
+  for (const uid of [TEST_UID, TEST_UID_2, TEST_ADMIN_UID, ...SIM_USERS.map((u) => u.uid)]) {
     try {
       await auth.deleteUser(uid);
     } catch {
@@ -201,8 +273,18 @@ export async function runSeed() {
       userPhotoURL: null,
     });
 
+  for (const u of SIM_USERS) {
+    await auth.createUser({ uid: u.uid, email: u.email, displayName: u.displayName });
+  }
+
   const userToken = await auth.createCustomToken(TEST_UID);
   const userToken2 = await auth.createCustomToken(TEST_UID_2);
   const adminToken = await auth.createCustomToken(TEST_ADMIN_UID);
   writeFileSync(TOKENS_FILE, JSON.stringify({ userToken, userToken2, adminToken }, null, 2));
+
+  const simTokens: Record<string, string> = {};
+  for (const u of SIM_USERS) {
+    simTokens[u.uid] = await auth.createCustomToken(u.uid);
+  }
+  writeFileSync(SIM_TOKENS_FILE, JSON.stringify(simTokens, null, 2));
 }

@@ -16,7 +16,7 @@ test('user can draft a trio, tag an MVP, and submit for an open match', async ({
   await page.getByRole('button', { name: /lock trio/i }).click();
 
   await page.waitForURL('**/dashboard', { timeout: 10000 });
-  await expect(page.getByText('Trios')).toBeVisible();
+  await expect(page.getByText('Trios', { exact: true })).toBeVisible();
 });
 
 test('a locked match disables player selection', async ({ page, signInAsUser }) => {

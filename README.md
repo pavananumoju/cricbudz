@@ -525,6 +525,8 @@ npm run test:e2e    # in another terminal — seeds the emulator, then runs the 
 
 How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment. The seed also pre-writes a couple of already-scored squads (bypassing the real finalize-match API, which calls the real RapidAPI) so `leaderboard.spec.ts` can exercise the real Firestore query + rules + rendering pipeline without a live scorecard fetch.
 
+**Multi-user simulation** — `e2e/multiuser.spec.ts` runs a whole "week in the life" of 10 simulated friends (concurrent drafting, Squad Room + the hide-until-toss toggle, admin scoring, then everyone comparing the same leaderboard) with no real logins. `POST /api/finalize-match` runs its real scoring path against a synthetic scorecard fixture (`e2e/simScorecard.ts`; `getMatchScorecard()` reads `e2e/fixtures/scorecards/` instead of RapidAPI when the emulator flag is set). The pure-function and rules layers of the same coverage live in `src/lib/leaderboard.test.ts` / `src/lib/multiuser-sim.test.ts` / `rules-tests/multiuser.rules.test.ts`. **`e2e/MULTIUSER.md` is the standard — read it before adding a multi-user check for a new feature.**
+
 `playwright.config.ts` runs E2E specs with `workers: 1` — they share seeded emulator state (fixed test users/matches) rather than each getting an isolated database, so cross-file parallelism would cause real races. Its `webServer.env` also sets `FIRESTORE_EMULATOR_HOST`/`FIREBASE_AUTH_EMULATOR_HOST` — needed because server-side API routes (e.g. `/api/leaderboard`) use the Admin SDK, which isn't gated by `NEXT_PUBLIC_USE_FIREBASE_EMULATOR` (that only affects the client SDK); without it the dev server under test would call real production Firestore/Auth using `.env.local`'s real credentials instead of the seeded emulator data.
 
 **Firestore rules tests (Vitest + `@firebase/rules-unit-testing`)** — exercises `firestore.rules` directly against the emulator, independent of the app. `visibility.rules.test.ts` proves which multi-document queries Firestore's rules engine can and can't allow under the submission-visibility toggle (see "Submission Visibility Toggle" above); `squadWrite.rules.test.ts` proves the write-side lock window, shape validation, and source-of-truth cross-check on `userSquads` (see "Write rules" under Firestore Collections above); `auditLog.rules.test.ts` proves `auditLog` is admin-read-only with no client write path at all (see "Audit Trail" under Scoring Engine above). Since `request.time` in rules is always the real server clock (no time-mocking hook, and the app's date override doesn't reach rules evaluation), tests simulate pre/post-toss by computing each squad's `matchTimestamp` relative to the real `Date.now()` rather than mocking time itself:
@@ -538,9 +540,10 @@ npm run test:rules   # boots the Firestore emulator for the duration of the run,
 **Continuous integration (`.github/workflows/ci.yml`)** — runs on every push to `main` and every pull request:
 
 * `check` job — `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run build`.
-* `rules-tests` job — sets up JDK 21 (temurin) + `firebase-tools`, then `npm run test:rules`.
+* `rules-tests` job — JDK 21 (temurin) + `firebase-tools`, then `npm run test:rules`.
+* `e2e` job — JDK 21 + `firebase-tools` + `npx playwright install chromium`, then `firebase emulators:exec "npm run test:e2e"` (the full Playwright suite, including the 10-user multi-user simulation; ~6 min).
 
-`npm run test:e2e` is intentionally left out of CI (it needs the emulator, a dev server, and browser downloads). Vercel builds a preview deployment for every branch/PR separately.
+Vercel builds a preview deployment for every branch/PR separately.
 
 ## Deploying
 

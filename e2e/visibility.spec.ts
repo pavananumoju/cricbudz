@@ -1,5 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'fs';
+import { test, expect, signInWithToken } from './fixtures';
+import { setVisibilityToggle } from './helpers';
 import {
   TOKENS_FILE,
   TEST_MATCH_VISIBILITY_ID,
@@ -13,44 +14,11 @@ import {
 // This is the exact scenario that can't be tested manually with only one
 // person: does user2 actually see (or not see) user1's trio, depending on
 // the admin's visibility toggle? Three separate signed-in browser contexts
-// (admin, user1, user2) make it possible to verify for real.
+// (admin, user1, user2) make it possible to verify for real. Sign-in and
+// the toggle helper are shared with the other multi-user specs — see
+// e2e/fixtures.ts, e2e/helpers.ts, e2e/MULTIUSER.md.
 
-async function signIn(page: Page, token: string) {
-  await page.goto('/');
-  await page.waitForFunction(() => typeof (window as unknown as Record<string, unknown>).__testSignInWithCustomToken === 'function');
-  await page.evaluate(
-    (t) => (window as unknown as { __testSignInWithCustomToken: (token: string) => Promise<unknown> }).__testSignInWithCustomToken(t),
-    token
-  );
-  await page.waitForURL('**/dashboard', { timeout: 15000 });
-}
-
-async function setVisibilityToggle(adminPage: Page, enabled: boolean) {
-  await adminPage.goto('/admin');
-  const toggleButton = adminPage.getByRole('button', { name: /hide trios until toss/i });
-  const dateInput = adminPage.getByLabel(/applies to/i);
-  await expect(dateInput).toBeVisible();
-
-  // The app derives "today" from IST (item #8), not UTC or the machine's
-  // local timezone — match this here, or a match a few hours out can land
-  // on the other side of a UTC/IST day boundary and the toggle silently
-  // targets the wrong day.
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-  await dateInput.fill(today);
-
-  // The toggle's current on/off state isn't independently queryable from
-  // outside, so read the settings doc's effect via the page after saving:
-  // click until the desired state text renders, then save.
-  const trackLocator = toggleButton.locator('span > span');
-  const isOn = await trackLocator.evaluate((el) => el.className.includes('translate-x-5'));
-  if (isOn !== enabled) {
-    await toggleButton.click();
-  }
-  await adminPage.getByRole('button', { name: /save visibility settings/i }).click();
-  await expect(adminPage.getByText(enabled ? /armed: trios hidden until toss/i : /visibility toggle turned off/i)).toBeVisible({
-    timeout: 10000,
-  });
-}
+const signIn = signInWithToken;
 
 test('visibility toggle hides trios pre-toss, and turning it off reveals them', async ({ browser }) => {
   const { userToken, userToken2, adminToken } = JSON.parse(readFileSync(TOKENS_FILE, 'utf-8'));

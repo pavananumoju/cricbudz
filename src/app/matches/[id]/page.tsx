@@ -564,7 +564,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
           ) : (
             <div className="space-y-2.5 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-2.5 sm:space-y-0">
               {otherSquads.map((squad) => (
-                <Card key={squad.userId} className="p-3.5">
+                <Card key={squad.userId} data-testid="squadroom-card" data-user-id={squad.userId} className="p-3.5">
                   <div className="flex items-center gap-2 mb-2.5 pb-2.5 border-b border-border">
                     <div className="w-6 h-6 rounded-full bg-primary-tint border border-primary/20 overflow-hidden shrink-0 flex items-center justify-center">
                       {squad.userPhotoURL ? (
@@ -573,7 +573,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                         <span className="text-micro font-black text-primary">{(squad.userDisplayName || '?').charAt(0)}</span>
                       )}
                     </div>
-                    <span className="text-xs font-display font-black uppercase truncate flex-1">
+                    <span data-testid="squadroom-user" className="text-xs font-display font-black uppercase truncate flex-1">
                       {squad.userDisplayName || 'Strategist'}
                     </span>
                     {squad.totalPoints !== undefined && (

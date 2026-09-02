@@ -161,3 +161,69 @@ describe('computeStandings', () => {
     expect(computeStandings([])).toEqual([]);
   });
 });
+
+// ── Multi-user scenarios (10 friends, one week) ───────────────────────────
+// Tier-1 of the multi-user test standard (see e2e/MULTIUSER.md): pure-
+// function coverage of the leaderboard maths at friend-group scale —
+// ranking, ties, partial weeks — no browser or emulator needed.
+describe('computeStandings — 10-user week', () => {
+  const WEEK_DAY = '2026-04-15'; // a Wednesday
+
+  function weekSquads(pointsByUser: Record<string, number | undefined>, matchDay = WEEK_DAY): UserSquad[] {
+    return Object.entries(pointsByUser).map(([userId, totalPoints]) =>
+      mkSquad({ userId, matchId: `m-${userId}`, matchDay, userDisplayName: `Friend ${userId}`, totalPoints })
+    );
+  }
+
+  it('ranks 10 users by total points with no gaps or duplicates', () => {
+    const points = Object.fromEntries(
+      Array.from({ length: 10 }, (_, i) => [`u${i + 1}`, (10 - i) * 25]) // u1=250 ... u10=25
+    );
+    const standings = computeStandings(weekSquads(points));
+    expect(standings).toHaveLength(10);
+    expect(standings.map((s) => s.userId)).toEqual(['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10']);
+    expect(standings.map((s) => s.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it('gives tied users the same rank and skips the next (competition ranking)', () => {
+    const standings = computeStandings(
+      weekSquads({ a: 100, b: 50, c: 50, d: 50, e: 10 })
+    );
+    expect(standings.map((s) => [s.userId, s.rank])).toEqual([
+      ['a', 1],
+      ['b', 2],
+      ['c', 2],
+      ['d', 2],
+      ['e', 5],
+    ]);
+  });
+
+  it('breaks ties deterministically by display name then userId (stable across runs)', () => {
+    const first = computeStandings(weekSquads({ zoe: 50, amy: 50, bob: 50 })).map((s) => s.userId);
+    const again = computeStandings(weekSquads({ bob: 50, zoe: 50, amy: 50 })).map((s) => s.userId);
+    expect(first).toEqual(again);
+    // displayName is `Friend ${userId}` -> "Friend amy" < "Friend bob" < "Friend zoe"
+    expect(first).toEqual(['amy', 'bob', 'zoe']);
+  });
+
+  it('is a partial week: unsubmitted / unscored friends are absent, not zero-ranked', () => {
+    const standings = computeStandings(
+      weekSquads({ submitted1: 40, submitted2: 20, notScoredYet: undefined })
+    );
+    expect(standings.map((s) => s.userId)).toEqual(['submitted1', 'submitted2']);
+    expect(standings.find((s) => s.userId === 'notScoredYet')).toBeUndefined();
+  });
+
+  it('sums each user across the whole Monday–Sunday week', () => {
+    const range = getWeekRange(new Date(`${WEEK_DAY}T10:00:00`));
+    const inWeek = [
+      mkSquad({ userId: 'u1', matchId: 'mon', matchDay: range.startDay, userDisplayName: 'Friend u1', totalPoints: 30 }),
+      mkSquad({ userId: 'u1', matchId: 'sun', matchDay: range.endDay, userDisplayName: 'Friend u1', totalPoints: 45 }),
+      mkSquad({ userId: 'u2', matchId: 'wed', matchDay: WEEK_DAY, userDisplayName: 'Friend u2', totalPoints: 60 }),
+    ];
+    const standings = computeStandings(inWeek);
+    expect(standings.find((s) => s.userId === 'u1')!.points).toBe(75);
+    expect(standings.find((s) => s.userId === 'u1')!.matchesScored).toBe(2);
+    expect(standings[0].userId).toBe('u1'); // 75 > 60
+  });
+});

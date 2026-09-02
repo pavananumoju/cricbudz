@@ -61,5 +61,22 @@ export async function getTeamPlayers(
 }
 
 export async function getMatchScorecard(matchId: string) {
+  // E2E/emulator only (never true in a real deploy): read a canned scorecard
+  // from e2e/fixtures/scorecards/ instead of calling RapidAPI, so the full
+  // finalize-match -> scoring -> leaderboard path can be exercised
+  // deterministically. Falls back to _default.json if there's no per-match file.
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const dir = join(process.cwd(), 'e2e', 'fixtures', 'scorecards');
+    for (const name of [`${matchId}.json`, '_default.json']) {
+      try {
+        return JSON.parse(await readFile(join(dir, name), 'utf8'));
+      } catch {
+        // try the next candidate
+      }
+    }
+    throw new Error(`No scorecard fixture found for ${matchId} in ${dir}`);
+  }
   return rapidFetch(`mcenter/v1/${matchId}/scard`);
 }
