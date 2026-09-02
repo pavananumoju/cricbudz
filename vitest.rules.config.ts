@@ -11,5 +11,7 @@ export default defineConfig({
     globals: true,
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Match the app's IST-anchored date logic (see vitest.config.ts).
+    env: { TZ: 'Asia/Kolkata' },
   },
 });
