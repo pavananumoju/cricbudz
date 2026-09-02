@@ -327,6 +327,46 @@ Second sitting on the same `AUDIT.md`. After the first pass merged (above), work
 
 Verified: lint · tsc · `test` (127) · `build` · `test:rules` (29) · `test:e2e` (8) all green; the draft-flow E2E specifically re-run after the P1-8 memo/callback restructure.
 
+## Multi-user test simulation (2026-09-02)
+
+The one thing that can't be tested with a single account — 10 friends
+drafting, hiding/revealing picks, and comparing a shared leaderboard —
+now has a standardized, no-manual-intervention harness. `e2e/MULTIUSER.md`
+is the standard; add multi-user coverage for future features there.
+
+- **Fixtures** (`e2e/testData.ts`): `SIM_USERS` (10), `SIM_ROSTER` (32
+  players, "SRH Alpha".."RCB Papa"), `simTrio(n)` — a distinct valid trio
+  per friend, with user 10 mirroring user 9 to force a leaderboard tie.
+- **Scorecard seam**: `e2e/simScorecard.ts` builds a synthetic,
+  schema-valid Cricbuzz scorecard exercising every rule (century, both
+  fifties, 3- and 5-wkt hauls, catches, run-out, stumping, `c sub (Name)`).
+  `getMatchScorecard()` reads `e2e/fixtures/scorecards/` instead of
+  RapidAPI when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` — so
+  `POST /api/finalize-match`'s real scoring → leaderboard path runs
+  deterministically in tests (it was previously bypassed by seeding
+  `totalPoints` directly).
+- **Shared building blocks**: `e2e/fixtures.ts` (`newAllSimUserPages`,
+  `signInWithToken`) + `e2e/helpers.ts` (`draftTrio`, `readSquadRoomNames`,
+  `readLeaderboard`, `goToPreviousWeeks`, `setVisibilityToggle`,
+  `finalizeMatchAsAdmin`). `visibility.spec.ts` was refactored onto these
+  (its private `signIn`/`setVisibilityToggle` are gone).
+- **Three tiers**: pure-function (`src/lib/leaderboard.test.ts` 10-user
+  block + `src/lib/multiuser-sim.test.ts`), rules
+  (`rules-tests/multiuser.rules.test.ts` — 10-user squad isolation), and
+  E2E (`e2e/multiuser.spec.ts` — "a week in the life": concurrent drafting
+  → Squad Room + toggle → admin scores → all 10 see the identical board).
+- **`computeStandings` fix**: was `sort((a,b)=>b.points-a.points)` +
+  `rank=idx+1`, giving tied users an arbitrary run-to-run order and no
+  shared rank. Now a deterministic tiebreak (points, then displayName,
+  then userId) and standard competition ranking (1, 2, 2, 4).
+- **CI**: new `e2e` job runs the whole Playwright suite (incl. the 10-user
+  sim, ~6 min) on every push/PR via `firebase emulators:exec`.
+- `data-testid` added to leaderboard rows and Squad Room cards so the
+  multi-user assertions don't hinge on fragile display text.
+
+Test totals: 135 unit (+8), 33 rules (+4), 10 E2E (+1). All green locally
+and wired into CI.
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

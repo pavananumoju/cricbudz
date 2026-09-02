@@ -31,3 +31,82 @@ export const TEST_PLAYERS = [
 ];
 
 export const TOKENS_FILE = 'e2e/.tokens.json';
+
+// ── Multi-user simulation fixtures ────────────────────────────────────────
+// Everything below powers e2e/multiuser.spec.ts and the multi-user unit /
+// rules tests. Kept separate from the single-user fixtures above so existing
+// specs are untouched. See e2e/MULTIUSER.md.
+
+export const SIM_USER_COUNT = 10;
+export const SIM_TOKENS_FILE = 'e2e/.sim-tokens.json';
+
+// A scored match placed two whole weeks back, so scoring it in the
+// multi-user spec never bleeds into any "current week" assertion in the
+// other specs. The spec navigates the leaderboard back to this week.
+export const SIM_MATCH_SCORED_ID = 'e2e-sim-scored';
+export const SIM_MATCH_SCORED_DAYS_AGO = 14;
+// A currently-open match for the live concurrent-drafting phase — separate
+// from TEST_MATCH_ID so it never collides with draft.spec.ts.
+export const SIM_MATCH_OPEN_ID = 'e2e-sim-open';
+
+export interface SimUser {
+  n: number;
+  uid: string;
+  email: string;
+  displayName: string;
+}
+
+export const SIM_USERS: SimUser[] = Array.from({ length: SIM_USER_COUNT }, (_, i) => {
+  const n = i + 1;
+  return {
+    n,
+    uid: `e2e-sim-user-${n}`,
+    email: `e2e-sim-${n}@example.com`,
+    displayName: `Sim Friend ${n}`,
+  };
+});
+
+// 16 players per team. Full names are "SRH Alpha".."SRH Papa": the scorecard
+// fixture references these exact strings so scoring.ts's full-name match
+// resolves them (the surname alone, e.g. "Alpha", collides across the two
+// teams — which correctly disables the surname fallback, exactly the real
+// ambiguity the fallback is designed to avoid).
+export const SIM_ROSTER_LETTERS = [
+  'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel',
+  'India', 'Juliet', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa',
+] as const;
+
+const SIM_ROLES = ['BATSMAN', 'BOWLER', 'ALL_ROUNDER', 'WICKET_KEEPER'];
+
+export interface SimPlayer {
+  id: string;
+  name: string;
+  team: 'SRH' | 'RCB';
+  role: string;
+  price: number;
+}
+
+export const SIM_ROSTER: SimPlayer[] = (['SRH', 'RCB'] as const).flatMap((team) =>
+  SIM_ROSTER_LETTERS.map((letter, i) => ({
+    id: `e2e-sim-${team.toLowerCase()}-${letter.toLowerCase()}`,
+    name: `${team} ${letter}`,
+    team,
+    role: SIM_ROLES[i % SIM_ROLES.length],
+    price: 8 + (i % 4),
+  }))
+);
+
+export function simPlayer(team: 'SRH' | 'RCB', letterIndex: number): SimPlayer {
+  return SIM_ROSTER.find((p) => p.id === `e2e-sim-${team.toLowerCase()}-${SIM_ROSTER_LETTERS[letterIndex].toLowerCase()}`)!;
+}
+
+// Deterministic trio for sim user N (1-based): SRH[n-1], RCB[n-1], SRH[n],
+// MVP = SRH[n-1]. User 10 deliberately mirrors user 9 to force a points
+// tie for the leaderboard tie-break assertions.
+export function simTrio(n: number): { players: string[]; mvpId: string } {
+  const idx = n === 10 ? 8 : n - 1;
+  const a = simPlayer('SRH', idx);
+  const b = simPlayer('RCB', idx);
+  const c = simPlayer('SRH', idx + 1);
+  return { players: [a.id, b.id, c.id], mvpId: a.id };
+}

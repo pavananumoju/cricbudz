@@ -159,6 +159,9 @@ export default function LeaderboardPage() {
                 transition={{ delay: Math.min(idx, 8) * 0.03 }}
               >
                 <Card
+                  data-testid="standings-row"
+                  data-rank={entry.rank}
+                  data-user-id={entry.userId}
                   className={cn(
                     'p-3.5 flex items-center gap-3',
                     medal ? medal.row : 'border-border'
@@ -178,7 +181,7 @@ export default function LeaderboardPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-display font-black text-sm uppercase italic tracking-tight truncate">{entry.displayName}</h4>
+                    <h4 data-testid="standings-name" className="font-display font-black text-sm uppercase italic tracking-tight truncate">{entry.displayName}</h4>
                     <p className="text-meta font-bold text-muted uppercase tracking-widest mt-0.5">
                       {isWeekOver && isFirst
                         ? 'Winner'
@@ -188,7 +191,7 @@ export default function LeaderboardPage() {
                     </p>
                   </div>
 
-                  <span className={cn('font-display font-black text-lg shrink-0', isFirst ? 'text-accent' : 'text-foreground')}>
+                  <span data-testid="standings-points" data-points={entry.points} className={cn('font-display font-black text-lg shrink-0', isFirst ? 'text-accent' : 'text-foreground')}>
                     {entry.points.toLocaleString()}
                   </span>
                 </Card>

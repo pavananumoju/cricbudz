@@ -100,9 +100,18 @@ export function computeStandings(squads: UserSquad[]): StandingsEntry[] {
     }
   }
 
-  const sorted = [...byUser.values()].sort((a, b) => b.points - a.points);
+  // Sort by points desc, then a deterministic tiebreak (displayName, then
+  // userId) so two users on equal points don't get an arbitrary,
+  // run-to-run-varying order. Ranks use standard competition ranking:
+  // tied users share a rank and the next rank skips (1, 2, 2, 4).
+  const sorted = [...byUser.values()].sort(
+    (a, b) =>
+      b.points - a.points ||
+      a.displayName.localeCompare(b.displayName) ||
+      a.userId.localeCompare(b.userId)
+  );
   sorted.forEach((entry, idx) => {
-    entry.rank = idx + 1;
+    entry.rank = idx > 0 && sorted[idx - 1].points === entry.points ? sorted[idx - 1].rank : idx + 1;
   });
   return sorted;
 }
