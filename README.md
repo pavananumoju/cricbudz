@@ -129,8 +129,10 @@ ipl-fantasy-arena/
 │   ├── backfill-squad-fields.mjs     # One-time migration: backfills matchTimestamp/matchDay/user* on old userSquads
 │   ├── backfill-squad-playernames.mjs # One-time migration: backfills playerNames on old userSquads (see below)
 │   ├── backfill-seriesid.mjs         # One-time migration: normalizes matches.seriesId to string (dry-run by default)
-│   └── restore-firestore.mjs         # CLI-only Firestore restore from a backup JSON (dry-run by default,
-│                                      # requires --confirm to write) — deliberately not a UI button
+│   ├── restore-firestore.mjs         # CLI-only Firestore restore from a backup JSON (dry-run by default,
+│   │                                  # requires --confirm to write) — deliberately not a UI button
+│   ├── delete-user.mjs               # CLI user offboarding: Auth account + all their squads (dry-run by default)
+│   └── check-java.mjs                # pretest:rules/preemulators preflight — fails early if JDK < 21
 │
 ├── e2e/                               # Playwright specs, run against the Firebase Emulator Suite
 │   ├── seed.ts / testData.ts         # Fixed test users/matches/players seeded before each run
@@ -518,6 +520,8 @@ Covers `getMatchTimeStatus()` (open/locked/completed logic), `getMatchDayIST()` 
 npm run emulators   # start Auth + Firestore emulators (needs Java 21+; keep running)
 npm run test:e2e    # in another terminal — seeds the emulator, then runs the suite
 ```
+
+`emulators` and `test:rules` run `scripts/check-java.mjs` first (`preemulators`/`pretest:rules`): if `JAVA_HOME`/`java` resolves to a JDK below 21 it stops with a clear message instead of firebase-tools' opaque crash.
 
 How auth works in E2E without real Google OAuth: `e2e/seed.ts` creates fixed test users directly in the Auth emulator and mints custom tokens for them. `AuthContext.tsx` exposes a `window.__testSignInWithCustomToken()` hook that only ever attaches when `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true` (which Playwright's `webServer` config sets) — it's structurally a no-op in any real deployment. The seed also pre-writes a couple of already-scored squads (bypassing the real finalize-match API, which calls the real RapidAPI) so `leaderboard.spec.ts` can exercise the real Firestore query + rules + rendering pipeline without a live scorecard fetch.
 
