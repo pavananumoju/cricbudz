@@ -61,6 +61,8 @@ export function TopBar({ bannerActive = false }: { bannerActive?: boolean }) {
 
           <button
             onClick={() => setProfileOpen(true)}
+            aria-label="Open profile menu"
+            aria-haspopup="dialog"
             className="w-9 h-9 rounded-full bg-primary-tint border border-primary/20 flex items-center justify-center overflow-hidden shrink-0 active:scale-95 transition-transform"
           >
             {user?.photoURL ? (

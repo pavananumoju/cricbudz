@@ -314,7 +314,18 @@ Ran the `dev-automation` audit-generator pipeline against the repo (7 phases →
 
 **Notable non-defects the audit confirmed:** the season-rollover mock test already exists (`dataService.test.ts`, "season-scoped"); no real-money mechanic anywhere (2025 Indian RMG ban doesn't apply).
 
-**Deliberately not done** (tracked "Not started" in `AUDIT.md`): P1-8 INP re-render scoping on the draft list (a `React.memo`/`useCallback` refactor — next candidate), minor a11y (`aria-pressed`, avatar label, `role="status"` on spinners), git-history author identity (scope call), and the P2/P3 polish + won't-fix rows (App Check, privacy policy, RSC conversion, leaderboard rank delta, `next/image` for team logos, `next lint`→ESLint-CLI migration).
+**Deliberately not done in the first pass** (later cleared in the follow-up below): P1-8 INP re-render scoping, minor a11y, `next/image` for team logos, etc.
+
+## Audit-generator pass — follow-up: remaining rows cleared (2026-09-02)
+
+Second sitting on the same `AUDIT.md`. After the first pass merged (above), worked the remaining ~26 rows so **every one of the 50 findings now has a disposition** — Fixed, Fixed (documented), Won't fix (scope), or Acknowledged, each with rationale in its row.
+
+- **Batch 5 — accessibility** (`63faedd`): `aria-pressed` on the PlayerCard select row + SelectedSlots MVP toggle; `aria-label` on the TopBar avatar button; `role="status"`/`aria-live` + `sr-only` text on the three page spinners; SelectedSlots MVP/remove buttons 24→32px; Sheet close button rendered unconditionally; dashboard delete-draft button given a real tap target + label.
+- **Batch 6 — performance** (`d51ce88`): **P1-8** — `PlayerCard` is `memo()`'d and the draft page feeds it stable props (`useMemo`'d brand, O(1) `Set` for `isSelected`, ref-stable `onSelect`), so a tap re-renders one card, not ~25. Team logos on /matches + /dashboard → `next/image` (`ui-avatars.com` added to `remotePatterns`). `getPlayersByTeams` → one `in` query instead of two.
+- **Batch 7 — security/data/devex** (`0af18d4`): minimal in-process throttle on `GET /api/sync` (429 if <15s since last); comment in `firestore.rules` on the UTC/IST `matchDay` skew (comment-only, no deploy); `/api/admin/backup` visibility caveat documented (code + RUNBOOK); `scripts/delete-user.mjs` for user offboarding (dry-run/`--confirm`) + RUNBOOK §3a; `scripts/check-java.mjs` as `pretest:rules`/`preemulators` so a stale `JAVA_HOME` fails with a clear message; README sample data `"Pavan"→"Alex"` and the `pavananumoju/cricbudz` handle dropped from prose; `eslint-config-next` pin `15.0.3`→`^15.5.20`.
+- **Won't fix / acknowledged** (rationale in each AUDIT.md row): P1-10 git author identity (private repo, already deployed — scrubbing history is disproportionate); P2-8/P2-10/P3-5 (perf items that would trade correctness or the standing client-SDK architecture for a marginal gain); P3-2 (leaderboard rank delta — a feature, and a deliberate simplicity choice); P3-8 (denormalized-profile staleness — a Cloud Function / render-time join is disproportionate; `saveUserSquad` already self-heals on re-edit); P3-12 (confirmation entry); P3-13 (privacy policy — expected absence). Partials: P3-6 (throttle yes, App Check no), P2-14 (label yes, 4h "completed" heuristic no), P3-15 (`next lint`→ESLint-CLI codemod deferred to the Next 16 upgrade).
+
+Verified: lint · tsc · `test` (127) · `build` · `test:rules` (29) · `test:e2e` (8) all green; the draft-flow E2E specifically re-run after the P1-8 memo/callback restructure.
 
 ## AI recommendations: removed
 

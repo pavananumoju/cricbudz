@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "pretest:rules": "node scripts/check-java.mjs",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
+    "preemulators": "node scripts/check-java.mjs",
     "emulators": "firebase emulators:start --only auth,firestore"
   },
   "dependencies": {
@@ -38,7 +40,7 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^8",
-    "eslint-config-next": "15.0.3",
+    "eslint-config-next": "^15.5.20",
     "jsdom": "^29.1.1",
     "postcss": "^8",
     "tailwindcss": "^4.0.0",

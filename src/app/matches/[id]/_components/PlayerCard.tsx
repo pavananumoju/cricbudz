@@ -2,7 +2,7 @@
 
 import { Check, Plus, Lock } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Player } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -16,10 +16,15 @@ interface PlayerCardProps {
   };
   isSelected: boolean;
   disabled?: boolean;
-  onSelect: () => void;
+  onSelect: (player: Player) => void;
 }
 
-export default function PlayerCard({ player, brand, isSelected, disabled, onSelect }: PlayerCardProps) {
+// memo'd (AUDIT.md P1-8): the draft arena renders ~22–30 of these; without
+// memo + stable props from the parent, every select/deselect/MVP tap
+// re-rendered the whole list. Parent passes a memoized `brand`, an O(1)
+// `isSelected` (Set lookup, not per-card .find()), and a ref-stable
+// `onSelect` so this actually skips.
+function PlayerCard({ player, brand, isSelected, disabled, onSelect }: PlayerCardProps) {
   const [imgError, setImgError] = useState(false);
 
   const numericId = player.imageId ? String(player.imageId).trim() : String(player.id).trim();
@@ -40,9 +45,11 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
 
   return (
     <button
-      onClick={onSelect}
+      onClick={() => onSelect(player)}
       disabled={disabled}
       aria-disabled={disabled}
+      aria-pressed={isSelected}
+      aria-label={`${player.name}${isSelected ? ' (selected)' : ''}`}
       className={cn(
         "w-full flex items-center gap-3 p-2 lg:p-2.5 rounded-xl border transition-all text-left group overflow-hidden relative",
         disabled ? "cursor-not-allowed" : "active:scale-[0.98]",
@@ -118,3 +125,5 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
     </button>
   );
 }
+
+export default memo(PlayerCard);

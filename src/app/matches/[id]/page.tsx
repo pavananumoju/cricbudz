@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Trophy, ChevronUp, Lock, CheckCircle2, EyeOff, Users, Zap, Award, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -209,6 +209,20 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     setMvpId(playerId);
   };
 
+  // Stable identity for the memoized PlayerCard list (AUDIT.md P1-8): a ref
+  // always holds the freshest selectPlayer closure, and this wrapper never
+  // changes, so a select/deselect tap only re-renders the touched card.
+  const selectPlayerRef = useRef(selectPlayer);
+  selectPlayerRef.current = selectPlayer;
+  const handleCardSelect = useCallback((player: Player) => selectPlayerRef.current(player), []);
+  // O(1) membership test per card instead of an O(n) .find() per card per render.
+  const selectedIds = useMemo(() => new Set(selectedPlayers.map((p) => p.id)), [selectedPlayers]);
+  // Stable brand objects (getTeamBrand returns a fresh object each call, which
+  // would defeat PlayerCard's memo). Nullable here (pre-load); non-null asserted
+  // below, past the `if (!match) return` guard.
+  const team1BrandMemo = useMemo(() => (match ? getTeamBrand(match.team1) : null), [match]);
+  const team2BrandMemo = useMemo(() => (match ? getTeamBrand(match.team2) : null), [match]);
+
   const checkStatusDetails = (): { canSubmit: boolean; message: string } =>
     validateSquad(selectedPlayers, mvpId, { isLocked, isCompleted });
 
@@ -277,8 +291,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center" role="status" aria-live="polite">
         <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <span className="sr-only">Loading match…</span>
       </div>
     );
   }
@@ -314,8 +329,8 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
   }
 
   const { canSubmit, message: statusMessage } = checkStatusDetails();
-  const team1Brand = getTeamBrand(match.team1);
-  const team2Brand = getTeamBrand(match.team2);
+  const team1Brand = team1BrandMemo!;
+  const team2Brand = team2BrandMemo!;
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans pb-28 lg:pb-10 selection:bg-primary/30">
@@ -399,9 +414,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                   key={player.id}
                   player={player}
                   brand={team1Brand}
-                  isSelected={!!selectedPlayers.find((p) => p.id === player.id)}
+                  isSelected={selectedIds.has(player.id)}
                   disabled={isLocked}
-                  onSelect={() => selectPlayer(player)}
+                  onSelect={handleCardSelect}
                 />
               ))}
             </div>
@@ -421,9 +436,9 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
                   key={player.id}
                   player={player}
                   brand={team2Brand}
-                  isSelected={!!selectedPlayers.find((p) => p.id === player.id)}
+                  isSelected={selectedIds.has(player.id)}
                   disabled={isLocked}
-                  onSelect={() => selectPlayer(player)}
+                  onSelect={handleCardSelect}
                 />
               ))}
             </div>

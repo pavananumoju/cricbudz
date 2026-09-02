@@ -6,6 +6,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { toast } from 'sonner';
 import {
   Trophy,
@@ -297,20 +298,22 @@ export default function Dashboard() {
 
                     <div className="flex items-center justify-center gap-6 mb-5 py-3 bg-surface-hover rounded-2xl">
                       <div className="flex flex-col items-center gap-1.5">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={getTeamLogo(data.match.team1, data.match.team1LogoId)}
                           alt={data.match.team1}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 object-contain drop-shadow-sm"
                         />
                         <span className="text-[10px] font-black uppercase tracking-widest text-muted">{data.match.team1}</span>
                       </div>
                       <span className="text-muted font-black italic text-xs">VS</span>
                       <div className="flex flex-col items-center gap-1.5">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={getTeamLogo(data.match.team2, data.match.team2LogoId)}
                           alt={data.match.team2}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 object-contain drop-shadow-sm"
                         />
                         <span className="text-[10px] font-black uppercase tracking-widest text-muted">{data.match.team2}</span>
@@ -419,10 +422,8 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3 min-w-0">
                     {s.match && (
                       <div className="flex -space-x-2 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getTeamLogo(s.match.team1, s.match.team1LogoId)} alt={s.match.team1} className="w-7 h-7 rounded-full border-2 border-surface object-contain bg-surface-hover" />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getTeamLogo(s.match.team2, s.match.team2LogoId)} alt={s.match.team2} className="w-7 h-7 rounded-full border-2 border-surface object-contain bg-surface-hover" />
+                        <Image src={getTeamLogo(s.match.team1, s.match.team1LogoId)} alt={s.match.team1} width={28} height={28} className="w-7 h-7 rounded-full border-2 border-surface object-contain bg-surface-hover" />
+                        <Image src={getTeamLogo(s.match.team2, s.match.team2LogoId)} alt={s.match.team2} width={28} height={28} className="w-7 h-7 rounded-full border-2 border-surface object-contain bg-surface-hover" />
                       </div>
                     )}
                     <div className="min-w-0">
@@ -438,8 +439,9 @@ export default function Dashboard() {
                         onClick={() => handleDeleteDraft(s.matchId)}
                         onBlur={() => setConfirmDeleteId((id) => (id === s.matchId ? null : id))}
                         disabled={deletingId === s.matchId}
+                        aria-label={isConfirming ? 'Confirm delete draft' : 'Delete draft'}
                         className={cn(
-                          'flex items-center gap-1 text-micro font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50',
+                          'flex items-center justify-center gap-1 min-h-7 min-w-7 text-micro font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50',
                           isConfirming
                             ? 'text-danger border-danger/40 bg-danger-tint'
                             : 'text-muted border-border hover:text-danger hover:border-danger/30'
