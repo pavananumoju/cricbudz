@@ -1,0 +1,55 @@
+{
+  "phase_number": 2,
+  "phase_title": "Accessibility (WCAG 2.2 AA)",
+  "findings": [
+    {
+      "local_id": "phase02-001",
+      "category": "Accessibility",
+      "severity": "P0",
+      "finding": "Every 'tint' color pair in src/app/globals.css fails WCAG 1.4.3 Contrast (Minimum, 4.5:1) in LIGHT mode: computed contrast is danger #ef4444 on danger-tint #fef2f2 = 3.44:1, success #10b981 on success-tint #ecfdf5 = 2.41:1, warning/accent #f59e0b on warning/accent-tint #fffbeb = 2.07:1 — all well below the 4.5:1 required for normal-size text (WCAG does not lower the bar for small text; several of these render as small as 10-12px). The corresponding dark-mode pairs (e.g. #f87171 on #450a0a = 5.84:1, #34d399 on #052e21 = 7.70:1, #fbbf24 on #451a03 = 8.97:1) all pass comfortably, so this is a light-mode-only regression, easy to miss by eyeballing since the pastel tint backgrounds look 'clean' rather than obviously low-contrast.",
+      "notes": "Computed by hand using the WCAG relative-luminance formula (sRGB -> linear -> 0.2126R+0.7152G+0.0722B, ratio=(L1+0.05)/(L2+0.05)); cross-checked the 4.5:1/3:1 thresholds via web search against W3C's Understanding SC 1.4.3 page. This pattern is used app-wide (bg-{success,danger,warning,accent}-tint + text-{...} together), including: Badge.tsx (success/danger/warning/mvp variants used for match-status and MVP chips across dashboard, matches, leaderboard, admin), SubmissionControl.tsx's status banner on the trio-draft arena, the arena's own sticky 'Arena locked — no further changes permitted' banner (src/app/matches/[id]/page.tsx:347-354, text-danger on bg-danger-tint), and DevOverrideBanner.tsx (text-warning on bg-warning-tint). Fix: darken the light-mode tint backgrounds or the foreground colors (or borrow the dark-mode approach of a much darker/more saturated pairing) until all four light-mode pairs clear 4.5:1; re-verify with a contrast checker rather than eyeballing, since the tint backgrounds look deceptively 'clean'."
+    },
+    {
+      "local_id": "phase02-002",
+      "category": "Accessibility",
+      "severity": "P1",
+      "finding": "The player-select control in PlayerCard.tsx (the whole player row, src/app/matches/[id]/_components/PlayerCard.tsx:42-54) and the MVP-toggle button in SelectedSlots.tsx (src/app/matches/[id]/_components/SelectedSlots.tsx:122-134) are both stateful toggle buttons (selected/not-selected, MVP/not-MVP) but neither sets aria-pressed (or any other state attribute). A screen-reader user tabbing through the trio-draft arena — the single most important flow in the app — hears only 'Rohit Sharma, button' or 'Set Rohit Sharma as MVP, button' with no indication of whether that player is currently selected or already tagged MVP; the state is conveyed purely via background color, border, and a Check/Zap icon swap that isn't exposed to assistive tech.",
+      "notes": "Verified by reading the JSX directly — isSelected/isAssignedMvp only drive className, never an aria-* attribute. Fix: add aria-pressed={isSelected} on PlayerCard's button and aria-pressed={isAssignedMvp} on the MVP button in SelectedSlots.tsx (WCAG 4.1.2 Name, Role, Value)."
+    },
+    {
+      "local_id": "phase02-003",
+      "category": "Accessibility",
+      "severity": "P1",
+      "finding": "TopBar.tsx's profile-avatar button (src/components/TopBar.tsx:56-66) has no accessible name: the <img> uses alt=\"\", the fallback <User> icon has no aria-label, and the <button> itself has no aria-label or visible text. A screen-reader user encounters an unlabeled 'button' with no way to know it opens the profile sheet.",
+      "notes": "This button is present in the fixed header on every page, so the gap is app-wide, not isolated. ProfileSheet.tsx's own avatar (a non-interactive div, lines 17-24) is fine to leave alt=\"\" since it's decorative next to visible name/email text — only the TopBar *button* version needs a fix. Fix: add aria-label=\"Open profile menu\" (or similar) to the button element. WCAG 4.1.2 / 2.4.4 (Link/Button Purpose)."
+    },
+    {
+      "local_id": "phase02-004",
+      "category": "Accessibility",
+      "severity": "P1",
+      "finding": "Page-level loading states (e.g. the full-page spinner at src/app/matches/[id]/page.tsx:260-266, `<div className=\"...animate-spin\" />` with no text) render a purely visual spinner with no role=\"status\", aria-live region, or accessible text anywhere the app shows a loading state. Async content transitions (data loading, then appearing/erroring) are not programmatically announced, so screen-reader users get no indication that the page is busy or that content has just loaded.",
+      "notes": "WCAG 4.1.3 Status Messages (AA). Fix: wrap loading spinners in a visually-hidden role=\"status\"/aria-live=\"polite\" element with text like 'Loading match…', or add aria-label to the spinner itself."
+    },
+    {
+      "local_id": "phase02-005",
+      "category": "Accessibility",
+      "severity": "P2",
+      "finding": "The MVP-toggle and remove buttons in SelectedSlots.tsx (src/app/matches/[id]/_components/SelectedSlots.tsx:122-143, `w-6 h-6` = exactly 24x24 CSS px) sit at the exact WCAG 2.5.8 minimum with zero margin — any box-sizing/border quirk or future padding tweak would push them under the 24x24 floor. They also sit directly adjacent to each other with only 6px of gap (gap-1.5) on a mobile-first app screen used with thumbs during time-pressured pre-toss decisions.",
+      "notes": "Not a current failure (24x24 meets the literal minimum per WCAG 2.2 SC 2.5.8, confirmed via web search of the official threshold), but risky/borderline given CLAUDE.md's own documented Button sizes are 36/44/48px — these two controls don't use the Button component and fall well below that floor. Recommend bumping to at least w-8 h-8 (32px) or w-9 h-9 (36px, matching the app's own 'sm' button height) for comfortable thumb targets."
+    },
+    {
+      "local_id": "phase02-006",
+      "category": "Accessibility",
+      "severity": "P2",
+      "finding": "Sheet.tsx only renders its close (X) button inside the `{title && (...)}` block (src/components/ui/Sheet.tsx:114-127) — if a Sheet is ever opened without a `title` prop, there is no visible or keyboard-discoverable close affordance at all; a user would have to already know to press Escape or drag the sheet down, neither of which is discoverable by a keyboard-only or motor-impaired user encountering the pattern for the first time.",
+      "notes": "Currently latent — both real usages (ProfileSheet.tsx, matches/[id]/page.tsx's trio sheet) pass a title, so no live instance is broken today. Flagging because it's a shared primitive other screens will likely reuse. Fix: render the close button unconditionally, independent of whether `title` is set."
+    },
+    {
+      "local_id": "phase02-007",
+      "category": "Accessibility",
+      "severity": "P3",
+      "finding": "PlayerCard.tsx truncates the player's full name with CSS `truncate` (src/app/matches/[id]/_components/PlayerCard.tsx:85) and no `title` attribute, unlike the app's own shortPlayerName() pattern (used in trio chips on the dashboard and Squad Room) which deliberately keeps the full name available via title/aria-label per CLAUDE.md. On narrow viewports where a long player name clips, sighted users have no way to recover the full name here.",
+      "notes": "shortPlayerName() itself is applied consistently and correctly everywhere it's used (verified both call sites — src/app/matches/[id]/page.tsx:549-550 and src/app/dashboard/page.tsx:326-330 — both pass title and aria-label alongside it), so CLAUDE.md's claim about that specific helper holds. This finding is about a *different* truncation path (plain CSS truncate on the untouched full name in PlayerCard) that doesn't get the same treatment. Fix: add title={player.name} to the <h4> for a hover/long-press affordance."
+    }
+  ]
+}
