@@ -35,6 +35,19 @@ export function getMatchTimeStatus(matchDate: string | Date, now: Date = new Dat
   return 'open';
 }
 
+// The wall-clock instant a squad locks (30 min before start), formatted in
+// IST for display, e.g. "7:00 PM IST". Used to show an explicit deadline on
+// the draft screen instead of only a binary open/locked flip. (AUDIT.md P2-1.)
+export function formatLockTimeIST(matchDate: string | Date): string {
+  const lockAt = new Date(new Date(matchDate).getTime() - SQUAD_LOCK_WINDOW_MS);
+  const time = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(lockAt);
+  return `${time} IST`;
+}
+
 // Canonical "what calendar day is this" for the whole app — India Standard
 // Time, the league's actual timezone, rather than UTC or the viewer's
 // device timezone. Before this, matchDay (dataService), the dashboard's

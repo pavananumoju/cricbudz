@@ -244,7 +244,7 @@ export default function Dashboard() {
           <h2 className="font-display font-black text-lg uppercase tracking-tighter italic">
             {todaysArenaData.length > 0 ? "Today's Arena" : 'Primary Draft'}
           </h2>
-          <Link href="/matches" className="text-[10px] font-black text-muted hover:text-primary uppercase tracking-widest flex items-center gap-1 transition-colors">
+          <Link href="/matches" className="text-meta font-black text-muted hover:text-primary uppercase tracking-widest flex items-center gap-1 transition-colors">
             All <ChevronRight size={12} />
           </Link>
         </div>
@@ -258,7 +258,7 @@ export default function Dashboard() {
             </p>
             <Link
               href="/matches"
-              className="bg-foreground text-background px-5 py-2 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+              className="bg-foreground text-background px-5 py-2 rounded-xl font-display font-black text-meta uppercase tracking-tight"
             >
               Browse Matches
             </Link>
@@ -287,8 +287,11 @@ export default function Dashboard() {
                         <p className="text-meta font-black text-primary uppercase tracking-wider leading-none">{label.base}</p>
                         <p className="text-meta font-bold text-muted uppercase tracking-wider mt-1 truncate">{label.suffix}</p>
                       </div>
-                      <Badge variant={isCompleted ? 'neutral' : isLocked ? 'danger' : 'success'} dot={!isCompleted}>
-                        {isCompleted ? 'Completed' : isLocked ? 'Locked' : 'Live'}
+                      {/* "Open" = trio selection still open, match not started. Was
+                          "Live", which wrongly implied the match itself was in
+                          progress (no ball-by-ball state exists). (AUDIT.md P1-3 / P2-14.) */}
+                      <Badge variant={isCompleted ? 'neutral' : isLocked ? 'danger' : 'success'} dot={!isCompleted && !isLocked}>
+                        {isCompleted ? 'Completed' : isLocked ? 'Locked' : 'Open'}
                       </Badge>
                     </div>
 
@@ -346,7 +349,7 @@ export default function Dashboard() {
                       {!isLocked ? (
                         <Link
                           href={`/matches/${data.match.id}`}
-                          className="bg-foreground text-background px-4 py-2 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+                          className="bg-foreground text-background px-4 py-2 rounded-xl font-display font-black text-meta uppercase tracking-tight"
                         >
                           {hasSquad ? 'Edit Trio' : 'Draft Trio'}
                         </Link>

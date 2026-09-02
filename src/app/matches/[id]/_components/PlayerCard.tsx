@@ -82,11 +82,12 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
       </div>
 
       <div className="flex-1 min-w-0 pr-2">
-        <h4 className="font-display font-black text-xs lg:text-[13px] uppercase tracking-tight italic truncate leading-tight pr-2 text-foreground">{player.name}</h4>
+        <h4 title={player.name} className="font-display font-black text-xs lg:text-[13px] uppercase tracking-tight italic truncate leading-tight pr-2 text-foreground">{player.name}</h4>
         <div className="flex items-center gap-2">
+          {/* No salary cap / budget in this game — `player.price` is randomized
+              at sync and unused by draft rules or scoring, so showing it as a
+              "₹9.4M" value falsely implied a spend constraint. (AUDIT.md P1-1 / P3-9.) */}
           <span className="text-meta font-black text-muted uppercase tracking-widest">{player.role}</span>
-          <span className="w-0.5 h-0.5 rounded-full bg-border" />
-          <span className="text-meta font-mono font-bold text-muted">₹{player.price.toFixed(1)}M</span>
         </div>
       </div>
 

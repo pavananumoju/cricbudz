@@ -15,7 +15,7 @@ import {
   getVisibilitySettings,
 } from '@/services/dataService';
 import { Player, Match, UserSquad, VisibilitySettings } from '@/types';
-import { cn, getMatchTimeStatus, getMatchDayIST, shortPlayerName } from '@/lib/utils';
+import { cn, getMatchTimeStatus, getMatchDayIST, shortPlayerName, formatLockTimeIST } from '@/lib/utils';
 import { SQUAD_TARGET_SIZE, checkDualFranchiseViolation, validateSquad } from '@/lib/draftRules';
 import { useDev } from '@/context/DevContext';
 import { useAuth } from '@/context/AuthContext';
@@ -158,9 +158,20 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
     };
   }, [id, user?.uid, squadRoomRetryToken]);
 
+  // Re-derived every render; a plain function call, so without a periodic
+  // re-render an idle open draft page would sail past the 30-min lock and keep
+  // showing selectable players + an active Save button. Tick while 'open' so
+  // the UI flips promptly at the boundary. (AUDIT.md P1-2.)
+  const [, setLockTick] = useState(0);
   const timeStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
   const isCompleted = timeStatus === 'completed';
   const isLocked = timeStatus !== 'open';
+
+  useEffect(() => {
+    if (timeStatus !== 'open') return;
+    const iv = setInterval(() => setLockTick((t) => t + 1), 15000);
+    return () => clearInterval(iv);
+  }, [timeStatus, match?.date]);
   // Toss = the moment "locked" begins. Once locked, the toggle no longer
   // matters — everyone can see everyone's trio for this match.
   const visibilityHiddenToday =
@@ -217,7 +228,14 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
       router.push('/dashboard');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to save your squad. Try again.');
+      // Distinguish "the arena locked while you were deciding" (server rule
+      // rejects a post-toss write) from a generic transient failure. (AUDIT.md P1-2.)
+      const nowStatus = match ? getMatchTimeStatus(match.date, getEffectiveNow()) : 'open';
+      toast.error(
+        nowStatus === 'open'
+          ? 'Failed to save your squad. Try again.'
+          : 'The arena just locked (30 minutes before start) — your trio was not saved.'
+      );
     } finally {
       setSaving(false);
     }
@@ -287,7 +305,7 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
         </p>
         <button
           onClick={() => router.push('/matches')}
-          className="bg-foreground text-background px-5 py-2.5 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+          className="bg-foreground text-background px-5 py-2.5 rounded-xl font-display font-black text-meta uppercase tracking-tight"
         >
           Back to Fixtures
         </button>
@@ -352,7 +370,17 @@ export default function SquadDraftPage({ params }: { params: Promise<{ id: strin
               </p>
             </div>
           </div>
-        ) : null}
+        ) : (
+          /* Explicit deadline instead of only a silent open→locked flip. (AUDIT.md P2-1.) */
+          <div className="bg-surface-hover border-t border-border">
+            <div className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-1.5 flex items-center justify-center gap-1.5">
+              <Lock size={11} className="text-muted shrink-0" />
+              <p className="text-meta font-bold text-muted uppercase tracking-wide">
+                Locks at {formatLockTimeIST(match.date)} · 30 min before start
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <main className="max-w-md md:max-w-3xl lg:max-w-6xl mx-auto px-3 py-4">

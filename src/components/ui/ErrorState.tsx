@@ -24,7 +24,7 @@ export function ErrorState({ permissionDenied, onRetry, className }: ErrorStateP
       <p className="text-muted max-w-xs mx-auto text-xs leading-relaxed mb-4">{message}</p>
       <button
         onClick={onRetry}
-        className="bg-foreground text-background px-5 py-2 rounded-xl font-display font-black text-[10px] uppercase tracking-tight"
+        className="bg-foreground text-background px-5 py-2 rounded-xl font-display font-black text-meta uppercase tracking-tight"
       >
         Try Again
       </button>
