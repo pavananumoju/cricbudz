@@ -20,3 +20,4 @@ blaze-init.json
 # dev-automation audit tooling -- local run logs/state, not source
 logs/
 audit-gen/staging/.stage3_reviewed
+sim-screens/
