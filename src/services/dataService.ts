@@ -71,54 +71,32 @@ export async function getPlayersByTeams(
   team1: string,
   team2: string
 ): Promise<Player[]> {
-  // Exact team short name match (RCB, MI, CSK etc.)
-  const q1 = query(
+  // One `in` query instead of two `==` queries + Promise.all — halves the
+  // round-trips on the draft page (opened on every squad edit). Firestore's
+  // `in` supports up to 30 values, comfortably covering the 2-team case.
+  // (AUDIT.md P3-4.)
+  const q = query(
     collection(db, 'players'),
-    where('team', '==', team1)
+    where('team', 'in', [team1, team2])
   );
 
-  const q2 = query(
-    collection(db, 'players'),
-    where('team', '==', team2)
-  );
+  const snap = await withTimeout(getDocs(q));
 
-  const [s1, s2] = await withTimeout(Promise.all([
-    getDocs(q1),
-    getDocs(q2),
-  ]));
-
-  return [
-    ...s1.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        name: data.name || '',
-        team: data.team || '',
-        teamId: data.teamId,
-        role: data.role || '',
-        price: data.price || 0,
-        imageId: data.imageId,
-        battingStyle: data.battingStyle,
-        bowlingStyle: data.bowlingStyle,
-        points: data.points
-      } as Player;
-    }),
-    ...s2.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        name: data.name || '',
-        team: data.team || '',
-        teamId: data.teamId,
-        role: data.role || '',
-        price: data.price || 0,
-        imageId: data.imageId,
-        battingStyle: data.battingStyle,
-        bowlingStyle: data.bowlingStyle,
-        points: data.points
-      } as Player;
-    }),
-  ];
+  return snap.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      name: data.name || '',
+      team: data.team || '',
+      teamId: data.teamId,
+      role: data.role || '',
+      price: data.price || 0,
+      imageId: data.imageId,
+      battingStyle: data.battingStyle,
+      bowlingStyle: data.bowlingStyle,
+      points: data.points
+    } as Player;
+  });
 }
 
 export async function saveUserSquad(squad: Omit<UserSquad, 'userId' | 'createdAt' | 'matchDay' | 'userDisplayName' | 'userPhotoURL'>) {

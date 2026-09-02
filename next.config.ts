@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'i.cricketcb.com', // Added to allow Cricbuzz legacy storage CDN access
       },
+      {
+        protocol: 'https',
+        hostname: 'ui-avatars.com', // getTeamLogo()'s fallback for an unknown team code
+      },
     ],
   },
 };

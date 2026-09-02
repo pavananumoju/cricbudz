@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getMatches } from '@/services/dataService';
 import { Match } from '@/types';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Trophy, Zap, MapPin, Calendar, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn, getTeamLogo, getMatchTimeStatus, getMatchDayIST } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
@@ -140,14 +141,12 @@ export default function MatchesPage() {
                       )}
                       <div className="flex items-center justify-center gap-5 pb-3 mb-3 border-b border-border">
                         <div className="flex flex-col items-center gap-1.5">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={getTeamLogo(match.team1, match.team1LogoId)} alt={match.team1} className="w-12 h-12 object-contain drop-shadow-sm" />
+                          <Image src={getTeamLogo(match.team1, match.team1LogoId)} alt={match.team1} width={48} height={48} className="w-12 h-12 object-contain drop-shadow-sm" />
                           <span className="text-[10px] font-black text-muted italic uppercase tracking-widest">{match.team1}</span>
                         </div>
                         <span className="text-[10px] font-black text-muted/60 italic uppercase">VS</span>
                         <div className="flex flex-col items-center gap-1.5">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={getTeamLogo(match.team2, match.team2LogoId)} alt={match.team2} className="w-12 h-12 object-contain drop-shadow-sm" />
+                          <Image src={getTeamLogo(match.team2, match.team2LogoId)} alt={match.team2} width={48} height={48} className="w-12 h-12 object-contain drop-shadow-sm" />
                           <span className="text-[10px] font-black text-muted italic uppercase tracking-widest">{match.team2}</span>
                         </div>
                       </div>
