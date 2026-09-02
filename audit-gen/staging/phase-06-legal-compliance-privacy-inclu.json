@@ -1,0 +1,48 @@
+{
+  "phase_number": 6,
+  "phase_title": "Legal/Compliance & Privacy (including Personal Information Exposure)",
+  "findings": [
+    {
+      "local_id": "phase06-001",
+      "category": "Personal Information Exposure",
+      "severity": "P1",
+      "finding": "Every commit in this repository's history is authored under a real personal name and personal Gmail address — 'Pavan Kumar Anumoju <pavananumoju@gmail.com>' — with no pseudonym or project-specific identity ever used.",
+      "notes": "Confirmed by direct evidence, not inference: `git config user.name`/`user.email` (both local and global) return 'Pavan Kumar Anumoju' / 'pavananumoju@gmail.com', and `git log --format='%an <%ae>' | sort -u` returns exactly one unique identity for the entire commit history — the same one. This is permanent, hard-to-scrub metadata (rewriting it means rewriting all git history) distinct from the 'CricBudz' project branding used everywhere else in the app/docs. It is invisible when just browsing rendered source files but fully exposed to anyone who can run `git log` against this repo (e.g. if it's ever pushed to a public GitHub remote, as README.md indicates it is — see phase06-002). Checked and ruled out as a separate concern: the Firebase/Vercel project identifiers (`gen-lang-client-0759118211`, the `ai-studio-b7247bb1-...` Firestore database ID) are Google AI Studio auto-generated IDs, not derived from a personal name/handle, and the production URL `ipl-fantasy-arena.vercel.app` is project-named — neither of those leaks personal identity independently."
+    },
+    {
+      "local_id": "phase06-002",
+      "category": "Personal Information Exposure",
+      "severity": "P2",
+      "finding": "README.md:38 states the project's Vercel deployment is '...also connected to the pavananumoju/cricbudz GitHub repo for automatic preview deploys' — explicitly documenting, in checked-in prose, that the project's GitHub org/username is derived from the developer's real name/email handle (matches the local-part of the personal Gmail address found in git history).",
+      "notes": "Found via `grep -n \"pavananumoju\" README.md`. This is a stronger exposure than the raw git log (finding phase06-001) because it's plain, easily-noticed documentation text rather than metadata a reader has to think to inspect — anyone reading README.md (a human, or an AI assistant briefed on the repo) sees the personal handle spelled out. If the GitHub repo or the connected Vercel project is public, this line confirms the public-facing project is directly attributable to the developer's personal account."
+    },
+    {
+      "local_id": "phase06-003",
+      "category": "Personal Information Exposure",
+      "severity": "P3",
+      "finding": "README.md:402's example `userSquads` JSON document uses \"userDisplayName\": \"Pavan\" as sample data illustrating the schema — the developer's own real first name appears to have been used as example/test data in checked-in documentation, rather than a generic placeholder like \"Jane Doe\".",
+      "notes": "Low severity in isolation (a first name alone, in an obviously-illustrative code sample), but it's a third independent location (alongside git log and the GitHub repo reference) where the real identity surfaces in this repo, reinforcing the pattern that no effort has been made to keep documentation/sample data pseudonymous. A generic placeholder name would cost nothing to swap in."
+    },
+    {
+      "local_id": "phase06-004",
+      "category": "Data Retention / Right-to-be-Forgotten",
+      "severity": "P2",
+      "finding": "There is no documented or in-app path — not even an admin-manual one — for removing a user's account and historical squad data if they leave the friend group; RUNBOOK.md's backup/restore/season-rollover checklist has no offboarding or deletion section, and no deletion UI/script exists in the codebase.",
+      "notes": "Checked via `grep -niE \"delete|remove.*user|leave|offboard|gdpr|right to be forgotten\" RUNBOOK.md` (no relevant hits) and a repo-wide look for a deletion route/script (none exists; `scripts/restore-firestore.mjs` is the only non-trivial data-mutation script, and it's for restore, not deletion). This compounds with the denormalization in `userSquads` (`userDisplayName`/`userPhotoURL` copied from Google sign-in onto every squad doc at write time, per `dataService.ts:143-144`, with no reconciliation if the user later changes their Google name/photo — confirmed no update-propagation logic exists) — a departing member's real name and Google profile photo would persist indefinitely across every squad document they ever created, with no documented way to purge it even manually. Proportionate to mention at P2 rather than P0/P1 given the actual scale (a handful of known friends, not the public), but it's a genuine, concrete gap rather than a theoretical one."
+    },
+    {
+      "local_id": "phase06-005",
+      "category": "Real-Money/Regulatory",
+      "severity": "P3",
+      "finding": "Confirmed (not assumed): no points, currency, or ranking in CricBudz is redeemable for money or any real-world value, so the 2025 Indian regulatory ban on real-money fantasy sports does not apply.",
+      "notes": "Read `src/lib/scoringRules.ts` end-to-end — `SCORING_RULES`/`MVP_MULTIPLIER` are abstract point values with no currency conversion or payout logic anywhere. The only '₹' in the codebase is a cosmetic player-price display in `PlayerCard.tsx:89` (\"₹{player.price.toFixed(1)}M\"); grepped `src/lib/draftRules.ts` for any budget/price enforcement and found none — `price` is decorative flavor text only, not a spendable/tradeable/budget-constrained value, matching CLAUDE.md's own note that pricing is randomized and unused. A repo-wide grep for prize/cash/payout/redeem/wallet/withdraw/rupee/entry-fee/stake terms returned zero hits outside that one cosmetic display. This is an explicit confirmation entry, not a defect."
+    },
+    {
+      "local_id": "phase06-006",
+      "category": "Legal/Compliance",
+      "severity": "P3",
+      "finding": "No privacy policy or terms-of-service page/copy exists anywhere in the app (no `/privacy` or `/terms` route under `src/app/`, no such copy on the landing page `src/app/page.tsx`).",
+      "notes": "Confirmed via `find src/app -iname \"*privacy*\" -o -iname \"*terms*\"` (no results) and a grep of `page.tsx` for privacy/terms/legal/policy language (no results). Consistent with the project's own stated scope (private, invite-only hobby app, not a public product per CLAUDE.md/PROGRESS.md) — noted as an expected absence, not a gap, per the audit's own framing."
+    }
+  ]
+}
