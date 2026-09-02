@@ -1,0 +1,48 @@
+{
+  "phase_number": 5,
+  "phase_title": "Backend/API & Data Integrity",
+  "findings": [
+    {
+      "local_id": "phase05-001",
+      "category": "Data Integrity",
+      "severity": "P0",
+      "finding": "ScorecardResponseSchema (src/lib/scoring.ts:21-41) marks every field the scoring engine actually reads as optional -- batsman.runs, bowler.wickets, bowler.dots, inning.batsman/bowler arrays, and even the top-level scorecard array itself -- so if Cricbuzz renames or drops any of these fields, validateScorecardResponse() still succeeds and /api/finalize-match silently computes 0 stats for every player instead of throwing the 502 the design (see the comment at scoring.ts:17-20 and CLAUDE.md) is supposed to guarantee.",
+      "notes": "Proven by the app's own test suite, not a hypothetical: scoring.test.ts:306-307 asserts validateScorecardResponse({ someUnrelatedApiChange: true }) does NOT throw, despite the test's own name ('throws a clear error when the response is a totally different shape'). Concrete scenario: Cricbuzz ships an API revision that renames `scorecard` to `scoreCard` or `runs` to `r` -- validation passes, parseScorecard's `scorecard.scorecard ?? []` / `batsman.runs ?? 0` fallbacks kick in, and every squad in the match gets totalPoints written as 0 (or just the MVP/MOTM bonus) with no error surfaced to the admin running finalize-match. Fix: make the fields the parser unconditionally reads (batsman[].runs, bowler[].wickets, bowler[].dots) required (or require the innings arrays themselves to be present when scorecard is present), and add a test asserting validateScorecardResponse throws when e.g. `runs` is entirely absent from a batsman entry, not just when it's retyped."
+    },
+    {
+      "local_id": "phase05-002",
+      "category": "Data Integrity",
+      "severity": "P2",
+      "finding": "creditDismissal's catch/run-out regexes (src/lib/scoring.ts:163-188) capture the fielder text verbatim, so a substitute-fielder dismissal in Cricbuzz's real format, e.g. 'c sub (Rahul Tripathi) b Bumrah', gets passed to resolvePlayerId as the literal string 'sub (rahul tripathi)' -- which matches neither the full-name map nor the surname fallback (lastWord returns 'tripathi)' with a trailing paren), so the fielding credit is always silently dropped to `unmatched.fielders` even when the substituting player is a synced roster player who should score the catch.",
+      "notes": "Not hypothetical: substitute fielders covering for injury/strategic treatment breaks are routine in IPL matches, and Cricbuzz's dismissal text convention for them is exactly this 'sub (Name)' wrapper. Impact is partially mitigated -- the unmatched name is surfaced to the admin via match.scoring.warnings and rendered on the match page (src/app/matches/[id]/page.tsx:446-451) -- but there is no way for the admin to correct it; the catch is permanently unscored for that player. Fix: strip a leading 'sub (' / trailing ')' wrapper (and any other non-name punctuation) before calling resolvePlayerId, with a test covering the 'c sub (Name) b Bowler' format."
+    },
+    {
+      "local_id": "phase05-003",
+      "category": "Data Integrity",
+      "severity": "P2",
+      "finding": "getMatchTimeStatus's 3-state model (src/lib/utils.ts:30-36) is consumed by dashboard/page.tsx:290-291 in a way that mislabels match state in both directions: the 'open' state (anything more than 30 minutes before scheduled start, which can be hours or days away) is rendered as the badge text 'Live', and the 'completed' state is a pure 4-hour-after-start clock heuristic with no allowance for rain delays or a Super Over, so a match still genuinely in progress can flip to a 'Completed' badge before it has actually finished (or conversely still read 'Locked' well after a real finish).",
+      "notes": "Confirmed this does not leak fabricated scores -- computeStandings/leaderboard gating is correctly keyed off `squad.totalPoints !== undefined` (set only by an actual /api/finalize-match run), completely independent of this display heuristic, so no premature scoring is implied anywhere. This is a user-facing status-accuracy bug, not a data-corruption one: a user opening the dashboard hours before a match starts sees 'Live', and a user checking during a rain-delayed/Super-Over finish sees 'Completed' while the match (and their point total) is still pending. Fix: rename the 'open' badge copy to something like 'Upcoming'/'Scheduled' rather than 'Live', and consider widening ASSUMED_MATCH_DURATION_MS or gating the 'Completed' label on `match.scoring` actually existing rather than purely on elapsed time."
+    },
+    {
+      "local_id": "phase05-004",
+      "category": "Data Integrity",
+      "severity": "P3",
+      "finding": "userSquads.userDisplayName/userPhotoURL are denormalized from Firebase Auth at submission time (src/services/dataService.ts:143-144) and never reconciled afterward -- grepping the whole codebase for both fields turns up only the write in saveUserSquad and read-only display sites (leaderboard.ts, matches/[id]/page.tsx) -- so a user who later changes their Google display name or profile photo will show the old name/photo on every squad they already submitted, permanently.",
+      "notes": "Real (if minor) data-integrity bug, not a privacy issue: the data was accurate when written, and simply drifts from the source of truth (Firebase Auth profile) with no code path to re-sync it. A fix would need either a Cloud Function/admin backfill triggered on profile update, or switching these display fields to a live lookup joined at render time instead of a denormalized copy -- the latter would also fix it retroactively for existing squad docs."
+    },
+    {
+      "local_id": "phase05-005",
+      "category": "Data Integrity",
+      "severity": "P3",
+      "finding": "players.price (randomized 8-11 at sync time, src/app/api/sync/route.ts:229) is confirmed dead for gameplay purposes -- grepping every `.price` read outside the sync route shows only a display use in src/app/matches/[id]/_components/PlayerCard.tsx:89 (`₹{player.price.toFixed(1)}M`) and pass-through defaults in dataService.ts:99/114; draftRules.ts's validateSquad has no budget/cap check at all -- yet it's rendered on every player card as a real-looking currency value with no accompanying UI/copy clarifying there is no salary cap, which risks users thinking a budget constraint exists and is being silently enforced (or silently broken) when none does.",
+      "notes": "Matches the concern raised in audit-gen/RESEARCH_NOTES.md's comparable-products section (Fantasy Playoffs' 'no budget' positioning) -- CricBudz made the same no-budget bet but left a half-wired budget-looking number in the UI. Not a bug in the data-integrity sense (price is internally consistent, just meaningless), but worth either removing the display or adding a one-line explainer that price is cosmetic/unused."
+    },
+    {
+      "local_id": "phase05-006",
+      "category": "Documentation / Audit Process",
+      "severity": "P3",
+      "finding": "Contrary to the premise (repeated in prior project memory 'season_scoping_untested_live' and audit-gen/RESEARCH_NOTES.md) that season rollover has zero test coverage, src/services/dataService.test.ts already contains a 'season-scoped' test suite that mocks the firebase/firestore query surface with two coexisting seriesId values (an OLD_SERIES_ID plus CRICKET_CONFIG.IPL_SERIES_ID) and asserts getMatches() excludes the old season, getEarliestMatchDate() returns the current season's earliest match, and getWeekNumber() computes Week 1/2 correctly off that date -- this gap is already closed and the standing memory should be updated or removed.",
+      "notes": "Read in full: src/services/dataService.test.ts:1-91. The mock is a real in-memory fake of collection/where/orderBy/limit/getDocs (not vacuous), so it does exercise the actual query-construction logic in dataService.ts, not just re-assert a constant. This does not cover a live rollover end-to-end (real Firestore, real sync writes) -- that residual risk is legitimate to keep flagged -- but the specific claim of 'no test simulates two seriesId values coexisting' is false as of this codebase state and should not be repeated verbatim in future audits without re-checking."
+    }
+  ]
+}
