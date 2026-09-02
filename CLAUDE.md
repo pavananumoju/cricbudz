@@ -8,7 +8,7 @@ CricBudz — a fantasy cricket platform for the IPL. Users pick a 3-player "trio
 
 This is a **private, invite-only hobby project for a small friend group** — not a public product. SEO, scale, and multi-tenant concerns are explicitly out of scope. See `PROGRESS.md` for the reasoning behind that and other standing decisions (e.g. staying on Firebase over a Postgres/Prisma migration) — check it before proposing architecture changes so you're not re-litigating something already decided.
 
-**README.md is the detailed reference** (full file structure, Firestore schemas, every feature, known limitations). Keep both README.md and this file current when you ship a change — README.md for detail, this file for orientation. **RUNBOOK.md** is a plain-English, non-technical maintenance checklist for the project owner (who may not be comfortable with the code after a long break) — if you change anything it describes (health-check commands, backup/restore, season rollover), update it too.
+**README.md is the detailed reference** (full file structure, Firestore schemas, every feature, known limitations). Keep both README.md and this file current when you ship a change — README.md for detail, this file for orientation. **RUNBOOK.md** is a plain-English, non-technical maintenance checklist for the project owner (who may not be comfortable with the code after a long break) — if you change anything it describes (health-check commands, backup/restore, season rollover), update it too. **AGENTS.md** is deliberately just a pointer to this file (it previously duplicated it and drifted — see AUDIT.md P0-3) — keep it a pointer; don't re-expand it into a second copy.
 
 ## Commands
 
