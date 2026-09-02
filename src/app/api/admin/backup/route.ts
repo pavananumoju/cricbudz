@@ -7,6 +7,14 @@ import { requireAdmin } from '@/lib/adminAuth';
 
 // Every collection a restore needs to fully reconstruct the app's data.
 // Keep this list in sync with scripts/restore-firestore.mjs.
+//
+// Accepted tradeoff (AUDIT.md P2-11): this exports `userSquads` in full, with
+// no submission-visibility filtering. An admin who is also a competing player
+// could, in principle, download a backup during an active "hide until toss"
+// window and see everyone's not-yet-visible picks. The visibility toggle is an
+// anti-casual-copying measure among players and "admin" is an explicitly
+// trusted role; a filtered export can't restore data, which is a worse
+// tradeoff. See RUNBOOK.md's Data Safety section.
 const BACKED_UP_COLLECTIONS = ['matches', 'players', 'userSquads', 'settings', 'auditLog'];
 
 export async function GET(req: Request) {

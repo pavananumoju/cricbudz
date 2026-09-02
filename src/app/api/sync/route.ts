@@ -7,9 +7,27 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { requireAdmin } from '@/lib/adminAuth';
 import { CRICKET_CONFIG } from '@/config/cricket';
 
+// Minimal in-process throttle (AUDIT.md P3-6): /api/sync calls the metered
+// RapidAPI Cricbuzz endpoint on every hit and there's no App Check / rate
+// limiter anywhere. This won't survive a cold start or spread across Vercel
+// instances, but on Fluid Compute (instances reused) it stops the realistic
+// failure mode — a buggy client retry loop hammering sync. A real limiter
+// would need a shared store; deliberately out of scope at friend-group size.
+const SYNC_MIN_INTERVAL_MS = 15_000;
+let lastSyncStartedAt = 0;
+
 export async function GET(req: Request) {
   const authResult = await requireAdmin(req);
   if ('error' in authResult) return authResult.error;
+
+  const sinceLast = Date.now() - lastSyncStartedAt;
+  if (sinceLast < SYNC_MIN_INTERVAL_MS) {
+    return NextResponse.json(
+      { error: `Sync ran ${Math.round(sinceLast / 1000)}s ago — wait ${Math.ceil((SYNC_MIN_INTERVAL_MS - sinceLast) / 1000)}s before retrying.` },
+      { status: 429 }
+    );
+  }
+  lastSyncStartedAt = Date.now();
 
   const adminDb = getAdminDb();
   const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;

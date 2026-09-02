@@ -187,6 +187,24 @@ caused it.
   scripts/restore-firestore.mjs" — it will run it in dry-run mode first
   (prints what it *would* do, changes nothing) and only overwrite real
   data with an explicit `--confirm` flag, run on purpose.
+- **One caveat about the backup:** it contains *every* squad, including
+  picks that the "hide trios until toss" toggle is currently hiding from
+  other players. If you're also competing that week, don't pull a backup
+  during an active hide window (or don't look at the squads in it) — it
+  would let you see picks you're not meant to see yet.
+
+---
+
+## 3a. Removing someone who leaves the group
+
+If a friend leaves and wants their account and history removed, tell an
+AI assistant: "Delete the CricBudz user someone@example.com using
+scripts/delete-user.mjs". Like the restore script it's dry-run first
+(prints their Auth account + every squad it would delete, changes
+nothing) and only deletes for real with an explicit `--confirm`. It
+removes their Firebase sign-in account and all their squad documents;
+past leaderboard weeks recompute live, so old standings simply stop
+listing them. Take a backup first if you might want the data back.
 
 ---
 

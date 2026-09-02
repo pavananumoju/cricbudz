@@ -30,6 +30,15 @@ service cloud.firestore {
     // carrying { hideUntilToss, date }. It only ever applies to the one day
     // it names, so a stale "on" from a past day is automatically inert —
     // no cron/reset job needed.
+    //
+    // NOTE (AUDIT.md P3-7): the `matchDay` passed here is resource.data.matchDay,
+    // a UTC-day slice of matchTimestamp (see matchesSourceOfTruth below), while
+    // the visibility date the admin picks is an IST calendar day and the two
+    // API-route reimplementations (GET /api/leaderboard, /api/matches/[id]/squads)
+    // compare against getMatchDayIST(). These agree for every real IPL match
+    // (starts 10:00/14:00 UTC), but a future feature that does a direct
+    // single-doc Firestore read of another user's squad would inherit this
+    // UTC/IST skew — route it through the API instead, or reconcile matchDay first.
     function isVisibilityHiddenForDay(matchDay) {
       let path = /databases/$(database)/documents/settings/visibility;
       return exists(path) && get(path).data.hideUntilToss == true && get(path).data.date == matchDay;

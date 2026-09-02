@@ -35,7 +35,7 @@ Each match, every user drafts a 3-player "trio" (from both playing teams), tags 
 
 ## Hosting
 
-* **Vercel** — frontend + API routes (`vercel --prod` from the repo; also connected to the `pavananumoju/cricbudz` GitHub repo for automatic preview deploys)
+* **Vercel** — frontend + API routes (`vercel --prod` from the repo; also connected to the GitHub repo for automatic preview deploys on push)
 * **Firebase** — Auth + Firestore. Firestore Security Rules are deployed via the Firebase CLI (`firebase deploy --only firestore:rules`), configured in `firebase.json`/`.firebaserc`.
 
 There is **no AI integration** in this app (an earlier Gemini-based recommendation feature was removed entirely — not part of the product direction).
@@ -427,7 +427,7 @@ Client-writable, owner-only (Firestore rules enforce `userId == request.auth.uid
   "createdAt": 1772400000000,
   "matchTimestamp": "2026-05-22T14:00:00.000Z",
   "matchDay": "2026-05-22",
-  "userDisplayName": "Pavan",
+  "userDisplayName": "Alex",
   "userPhotoURL": "https://lh3.googleusercontent.com/...",
   "totalPoints": 187
 }
