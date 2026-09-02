@@ -43,6 +43,8 @@ export default function PlayerCard({ player, brand, isSelected, disabled, onSele
       onClick={onSelect}
       disabled={disabled}
       aria-disabled={disabled}
+      aria-pressed={isSelected}
+      aria-label={`${player.name}${isSelected ? ' (selected)' : ''}`}
       className={cn(
         "w-full flex items-center gap-3 p-2 lg:p-2.5 rounded-xl border transition-all text-left group overflow-hidden relative",
         disabled ? "cursor-not-allowed" : "active:scale-[0.98]",

@@ -111,18 +111,21 @@ export function Sheet({ open, onClose, title, children, className }: SheetProps)
             <div className="sticky top-0 bg-surface pt-3 pb-2 flex flex-col items-center rounded-t-[2rem] touch-none">
               <div className="w-10 h-1.5 rounded-full bg-border" />
             </div>
+            {/* Close button is rendered unconditionally — a titleless sheet
+                still needs a discoverable close affordance for keyboard/motor
+                users who don't know about Escape or drag-to-dismiss. (AUDIT.md P2-7.) */}
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="absolute top-3 right-4 w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center text-muted hover:text-foreground transition-colors z-10"
+            >
+              <X size={16} />
+            </button>
             {title && (
-              <div className="px-6 pb-3 flex items-center justify-between">
+              <div className="px-6 pb-3 pr-14">
                 <h3 id={titleId} className="font-display font-black text-lg uppercase tracking-tight italic text-foreground">
                   {title}
                 </h3>
-                <button
-                  onClick={onClose}
-                  aria-label="Close"
-                  className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center text-muted hover:text-foreground transition-colors"
-                >
-                  <X size={16} />
-                </button>
               </div>
             )}
             <div className="px-6 pb-6 touch-auto">{children}</div>

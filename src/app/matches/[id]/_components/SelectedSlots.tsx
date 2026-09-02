@@ -118,28 +118,29 @@ export default function SelectedSlots({
                     </div>
                   )
                 ) : (
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
                     <button
                       type="button"
                       onClick={() => onSetMvp(player.id)}
                       aria-label={`Set ${player.name} as MVP`}
+                      aria-pressed={isAssignedMvp}
                       className={cn(
-                        "w-6 h-6 rounded-lg flex items-center justify-center transition-all",
+                        "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
                         isAssignedMvp
                           ? "bg-accent text-white shadow-sm"
                           : "bg-surface-hover text-muted hover:bg-accent-tint hover:text-accent"
                       )}
                     >
-                      <Zap size={11} className={isAssignedMvp ? "fill-current" : ""} />
+                      <Zap size={13} className={isAssignedMvp ? "fill-current" : ""} />
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onRemove(player.id)}
                       aria-label={`Remove ${player.name} from trio`}
-                      className="w-6 h-6 rounded-lg bg-surface-hover hover:bg-danger-tint text-muted hover:text-danger flex items-center justify-center transition-all"
+                      className="w-8 h-8 rounded-lg bg-surface-hover hover:bg-danger-tint text-muted hover:text-danger flex items-center justify-center transition-all"
                     >
-                      <X size={11} />
+                      <X size={13} />
                     </button>
                   </div>
                 )}
