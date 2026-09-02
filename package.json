@@ -9,7 +9,6 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest:e2e": "node scripts/check-java.mjs",
     "test:e2e": "playwright test",
     "pretest:rules": "node scripts/check-java.mjs",
     "test:rules": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
