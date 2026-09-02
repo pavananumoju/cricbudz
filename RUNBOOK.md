@@ -41,6 +41,11 @@ Run these in order. Each one takes a minute or two. If any step fails,
 copy the error output and hand it to an AI assistant along with "this
 step in RUNBOOK.md failed, please fix it."
 
+Steps 1a–1d also run automatically on GitHub for every push to `main` and
+every pull request (the "CI" checks, `.github/workflows/ci.yml`), so if
+you're pushing through a PR you can watch the checks there instead of
+running them by hand. Running them locally first is still the faster loop.
+
 ### 1a. Does the code still compile?
 
 ```bash
@@ -66,10 +71,11 @@ npm run lint
 npx vitest run
 ```
 
-**What good looks like:** a line like `Tests  69 passed (69)` with no
-failures. These tests check the fantasy-points scoring math specifically
-— if they fail, **do not finalize any real matches** until they're fixed,
-since it means a score could come out wrong.
+**What good looks like:** a line like `Tests  N passed (N)` with no
+failures (N grows as tests are added). These tests check the
+fantasy-points scoring math specifically — if they fail, **do not finalize
+any real matches** until they're fixed, since it means a score could come
+out wrong.
 
 ### 1d. Does the app actually build for production?
 
@@ -213,7 +219,23 @@ yourself out).
 
 ---
 
-## 6. When something feels broken and you don't know why
+## 6. Two gotchas that look like bugs but aren't
+
+* **"This domain is not yet authorized for sign-in. Contact the app admin."**
+  on a Vercel *preview* URL (a branch/PR deployment, not
+  `ipl-fantasy-arena.vercel.app`). Google sign-in only works from domains
+  listed in Firebase Console → Authentication → Settings → **Authorized
+  domains**. Production is listed; preview URLs are not. Add the exact
+  preview hostname there (it's stable per branch), test, then remove it
+  after merging. Or just test the branch locally with `npm run dev` —
+  `localhost` is always authorized.
+* **`npm run test:rules` / `test:e2e` / `emulators` fail with**
+  *"firebase-tools no longer supports Java version before 21"* even though
+  you have a new JDK. The emulators read `JAVA_HOME`, not just whatever
+  `java` is on `PATH`. Point `JAVA_HOME` at a JDK 21+ install
+  (`export JAVA_HOME=$(/usr/libexec/java_home -v 21)` on macOS) and retry.
+
+## 7. When something feels broken and you don't know why
 
 Give an AI assistant this exact prompt, filled in:
 

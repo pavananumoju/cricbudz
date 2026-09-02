@@ -290,6 +290,32 @@ One shared `settings/visibility` toggle and one global leaderboard structurally 
 
 **Acceptance (met):** this file now states, in one place, what breaks first at 10× (the per-visit read quota, then the linear leaderboard, then the finalize batch cap, then the in-memory backup) and the pre-decided answer for each, plus the multi-league shape if ever needed.
 
+## Audit-generator pass: 24 findings fixed, CI added (2026-09-02)
+
+Ran the `dev-automation` audit-generator pipeline against the repo (7 phases → `AUDIT.md`, 50 findings), then fixed the high-value subset in four batches on branch `audit-gen-2026-09-02`, merged to `main` via a **merge commit** (not squash — `AUDIT.md`'s tracking table cites per-batch commit hashes). `AUDIT.md` at the repo root has the full row-by-row status; the untouched rows are polish or explicit scope-calls, not a backlog.
+
+**What shipped:**
+
+- **Contrast (WCAG 4.5:1).** Light-mode `--danger`/`--success`/`--warning`/`--accent` were the obvious 500-weight hues and failed contrast (2.1–3.4:1) on their own `*-tint` backgrounds — used app-wide by `Badge`, status banners, `DevOverrideBanner`. Darkened to 700-weight; recomputed all pairings ≥4.8:1. `.dark` already passed, untouched.
+- **Legibility.** `Badge` and ~6 CTA/nav labels were raw `text-[10px]` (below the item-#9 `text-micro` floor) → moved onto the `text-meta`/`text-micro` tokens.
+- **Dead `price` UI.** `PlayerCard` rendered `player.price` as `₹9.4M` despite no salary cap and nothing reading the field. Display removed; field kept in the model.
+- **Draft-lock clarity.** Draft page now shows `"Locks at H:MM PM IST · 30 min before start"` while open and re-checks the clock every ~15s so an idle open page flips to locked at the boundary; a save that races the lock says so instead of a generic retry.
+- **Admin page states.** `getVisibilitySettings()` had no `.catch()` (stuck spinner forever on a rejected read); `loadUsers()` failure fell through to "No registered users yet." — both now show a retry, and loading uses `<Skeleton>` like the rest of the app.
+- **`DevOverrideBanner`** was painting behind the fixed `TopBar` and invisible on every chrome page — now fixed/`z-50`/`h-9` with `NavigationWrapper` offsetting the TopBar + content when it's active.
+- **Scorecard schema (fail-loud).** `ScorecardResponseSchema` marked every field the parser reads as optional, so a Cricbuzz rename/drop validated clean and scored everyone 0. The unconditionally-read fields (`scorecard`, `batsman.runs`, `bowler.wickets`) are now required → 502; `bowler.dots` stays optional (unreliable data, minor rule).
+- **Substitute fielders.** `creditDismissal` now strips the `sub (Real Name)` wrapper Cricbuzz uses for impact/concussion subs before name resolution, so their catches are credited instead of silently dropped.
+- **Read timeout.** Every `dataService.ts` read is raced against a 12s client deadline (`withTimeout()`/`TimeoutError`, `src/lib/errors.ts`); a mid-load network drop now shows `ErrorState` instead of an endless spinner (worse under `experimentalForceLongPolling`).
+- **Admin demotion.** `POST /api/admin/users` now calls `revokeRefreshTokens(uid)` on revoke — a just-demoted admin's still-valid token no longer works for up to an hour.
+- **Docs.** `AGENTS.md` was a stale verbatim `CLAUDE.md` copy that contradicted it (and `firestore.rules`) on server-side lock enforcement → replaced with a one-line pointer to `CLAUDE.md`; matching README self-contradiction fixed.
+- **CI.** `.github/workflows/ci.yml` — `lint`+`tsc`+`test`+`build` on every push/PR, plus a JDK-21 `test:rules` job. First CI in the repo's history; its first run immediately caught a **pre-existing** timezone-dependent `leaderboard.test.ts` failure (naive date literals that only computed the right week in IST) — fixed by pinning the vitest runner to `TZ=Asia/Kolkata`, the app's canonical zone.
+- **Tests:** +21 unit/route tests (127 total), 29 rules, 8 E2E — all green in CI. `route.test.ts` files (mocked Admin SDK/auth) are new: the visibility policy in the leaderboard + squads routes, and finalize-match's 502 path.
+
+**Verified:** lint · tsc · 127 unit · build · 29 rules · 8 E2E all green locally and in CI on `main`; visual smoke of 7 screens (light + dark) against the emulator. Deployed to production via Vercel on merge.
+
+**Notable non-defects the audit confirmed:** the season-rollover mock test already exists (`dataService.test.ts`, "season-scoped"); no real-money mechanic anywhere (2025 Indian RMG ban doesn't apply).
+
+**Deliberately not done** (tracked "Not started" in `AUDIT.md`): P1-8 INP re-render scoping on the draft list (a `React.memo`/`useCallback` refactor — next candidate), minor a11y (`aria-pressed`, avatar label, `role="status"` on spinners), git-history author identity (scope call), and the P2/P3 polish + won't-fix rows (App Check, privacy policy, RSC conversion, leaderboard rank delta, `next/image` for team logos, `next lint`→ESLint-CLI migration).
+
 ## AI recommendations: removed
 
 The Gemini-powered "AI Assist" trio suggestion feature (`/api/recommend`)

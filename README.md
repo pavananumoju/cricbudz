@@ -54,9 +54,11 @@ ipl-fantasy-arena/
 │   │   │   ├── finalize-match/       # Admin-only: fetch scorecard, score every squad for a match
 │   │   │   ├── leaderboard/          # Any signed-in user: server-side week-range squad query (Admin SDK)
 │   │   │   ├── matches/[matchId]/squads/  # Any signed-in user: server-side Squad Room query (Admin SDK)
-│   │   │   └── admin/
-│   │   │       ├── users/            # Admin-only: list users, grant/revoke the `admin` custom claim
-│   │   │       └── backup/           # Admin-only: read-only full Firestore export as downloadable JSON
+│   │   │   ├── admin/
+│   │   │   │   ├── users/            # Admin-only: list users, grant/revoke the `admin` custom claim
+│   │   │   │   └── backup/           # Admin-only: read-only full Firestore export as downloadable JSON
+│   │   │   └── **/route.test.ts      # Route-handler tests (Admin SDK + auth mocked): visibility policy in
+│   │   │                             # leaderboard + squads routes, finalize-match's 502 fail-loud path
 │   │   │
 │   │   ├── admin/
 │   │   │   └── page.tsx              # Dev Control Center: date override, submission visibility toggle,
@@ -138,7 +140,9 @@ ipl-fantasy-arena/
 │   ├── visibility.rules.test.ts      # Proves which multi-document queries the rules engine can/can't allow
 │   ├── squadWrite.rules.test.ts      # Proves the lock window / shape / source-of-truth checks on userSquads writes
 │   └── auditLog.rules.test.ts        # Proves auditLog is admin-read-only with no client write path
-├── vitest.config.ts                  # Unit/component test config (jsdom + RTL)
+├── .github/workflows/ci.yml          # CI: lint + tsc + unit tests + build, and a JDK-21 rules-tests job
+├── AUDIT.md                          # Audit findings tracking table (generated + hand-worked)
+├── vitest.config.ts                  # Unit/component test config (jsdom + RTL; TZ pinned to Asia/Kolkata)
 ├── vitest.rules.config.ts            # Separate Node-environment config for rules-tests/
 ├── playwright.config.ts              # E2E test config (webServer + globalSetup seeding)
 ├── firestore.rules                   # Deployed via `firebase deploy --only firestore:rules`
@@ -168,6 +172,7 @@ ipl-fantasy-arena/
 
 * Exactly 3 players, from exactly 2 teams (not all 3 from one side), one tagged MVP (2x points) before locking.
 * **Squads lock 30 minutes before match start ("toss")** — enforced both in the UI *and* server-side by `firestore.rules` (pre-toss write checks, with a cross-read of the real match doc so a client can't spoof the toss time). See the `userSquads` **Write rules** section below for the exact rule logic.
+* While a match is still open, the draft header shows an explicit **"Locks at H:MM PM IST · 30 min before start"** line (not just a silent open→locked flip), and the page re-checks the clock every ~15s so it flips to the locked UI at the boundary even if left open and idle. A save that races the lock now reports "the arena just locked", not a generic retry.
 * Match status is a 3-way state, not just locked/unlocked:
   * **Open** — before the lock window, fully editable.
   * **Locked** — inside the lock window through an assumed ~4h match duration (no live ball-by-ball sync exists, so "in progress" is inferred, not observed). Red banner, grayed player cards, lock icons.
@@ -179,7 +184,8 @@ ipl-fantasy-arena/
 
 Phone-first polish pass; no data, rules, or scoring changes.
 
-* **Type floor.** Two documented font-size tokens live in `@theme` in `src/app/globals.css`: `text-meta` (12px) for informational text you actually read (player roles/prices, status lines, dates/times, emails, leaderboard sub-labels, the draft validation checklist, `/rules` point values, trio-chip names) and `text-micro` (11px) for purely decorative uppercase micro-labels (stat captions, nav labels, slot labels). The audit found much informational text had drifted to 7–10px; all of it is now ≥12px. Short decorative pills that were already ≥10px (e.g. the shared `Badge`, 2–4-char team codes next to a logo) are left as-is — they're legible chrome, and blanket-raising every one risks layout churn in the compact UI.
+* **Type floor.** Two documented font-size tokens live in `@theme` in `src/app/globals.css`: `text-meta` (12px) for informational text you actually read (player roles, status lines, dates/times, emails, leaderboard sub-labels, the draft validation checklist, `/rules` point values, trio-chip names) and `text-micro` (11px) for purely decorative uppercase micro-labels (stat captions, nav labels, slot labels, the shared `Badge`). The audit found much informational text had drifted to 7–10px; informational text is now ≥12px and no on-screen text sits below the 11px `text-micro` floor. A later pass (see AUDIT.md) also moved the `Badge` and several CTA/nav labels off raw `text-[10px]` onto these tokens, and darkened the light-mode status/accent colors so every `*-tint` pairing clears WCAG 4.5:1.
+* **No fake budget.** Player cards used to render `player.price` as a `₹9.4M`-style value even though there is no salary cap and `price` is randomized at sync and read by nothing. That display was removed; the field stays in the data model, unused.
 * **Same-surname disambiguation.** Trio chips (dashboard + Squad Room) used to render a bare surname (`name.split(' ').pop()`), so two Sharmas or two Pandyas in one match were indistinguishable. `shortPlayerName()` (`src/lib/utils.ts`) renders an initial-plus-surname short form instead ("Rohit Sharma" → "R Sharma"); the full name stays on the chip's `title`/`aria-label` for hover and assistive tech.
 * **Bottom sheet is a real dialog.** `src/components/ui/Sheet.tsx` (mobile profile menu + trio-submit sheet) now has `role="dialog"`, `aria-modal`, an accessible name from its title, Escape-to-close, a Tab focus trap, focus-in on open, and focus-return to the trigger on close. The close button is labelled `Close`. Covered by `src/components/ui/Sheet.test.tsx`.
 * **Completed fixture cards** no longer dim the whole card to 60% opacity (which pushed already-small text below comfortable contrast) — they use a subtle muted background tint plus the existing "Completed" badge instead.
@@ -275,11 +281,17 @@ different failure modes are handled differently on purpose:
   is validated at runtime with a Zod schema (`ScorecardResponseSchema` in
   `src/lib/scoring.ts`, via `validateScorecardResponse()`) before any
   points are calculated. The schema uses `.passthrough()` so *new* fields
-  Cricbuzz adds don't break anything — only a *missing or retyped* field
-  the scoring engine actually depends on does. If that happens, the route
-  throws a specific error (naming the exact field path) and returns
-  HTTP 502 **instead of silently computing wrong fantasy points** — wrong
-  scores are worse than a visible failure here.
+  Cricbuzz adds don't break anything, but the fields the parser reads
+  unconditionally — the top-level `scorecard` array, each `batsman.runs`,
+  each `bowler.wickets` — are **required**, so a rename or drop of any of
+  them fails validation instead of quietly parsing to zeros. (`bowler.dots`
+  stays optional on purpose: real dot-ball data is unreliable/often absent,
+  and a rename there only forfeits the minor dot-ball bonus.) On any such
+  failure the route throws a specific error (naming the exact field path)
+  and returns HTTP 502 **instead of silently computing wrong fantasy
+  points** — wrong scores are worse than a visible failure here.
+  `src/app/api/finalize-match/route.test.ts` asserts the 502 path;
+  `src/lib/scoring.test.ts` covers the schema itself.
 * **Fixture/roster sync (`/api/sync`)** — already defensively parses
   several known Cricbuzz response shapes and reports `debug` info when
   zero matches are found. Additionally, if a team's player-list response
@@ -311,6 +323,12 @@ token, verifies it via `getAdminAuth().verifyIdToken()`, and confirms the
 `admin` custom claim. One implementation to keep correct instead of four
 copies that could quietly drift apart.
 
+When `POST /api/admin/users` revokes someone's `admin` claim it also calls
+`getAdminAuth().revokeRefreshTokens(uid)`, forcing that user's client to
+re-authenticate immediately — otherwise their already-issued ID token keeps
+carrying `admin: true` (and working on every admin route) for up to the
+token's ~1h lifetime.
+
 ## Client-side Firestore cache (audit item #6)
 
 `src/lib/firebase.ts` initializes the client Firestore SDK with
@@ -341,6 +359,15 @@ There is no pull-to-refresh gesture in the app; the closest thing is a hard
 browser refresh (always re-reads from the server first) or, for fixture
 data specifically, the admin "Sync Fixtures" button on `/dashboard`, which
 reloads the page after syncing.
+
+**Read timeout.** Every `dataService.ts` read is raced against a 12s
+client-side deadline (`withTimeout()` / `TimeoutError` in `src/lib/errors.ts`;
+API-backed reads use `AbortSignal.timeout`). Firestore's `getDoc`/`getDocs`
+can't be aborted and, under `experimentalForceLongPolling`, are slow to
+notice a dropped connection — without this a mid-load network drop left a
+full-screen spinner running forever. Now it surfaces the normal `ErrorState`
+retry instead. `isPermissionDeniedError()` returns false for a timeout, so
+the copy is "check your connection", not "no access".
 
 ---
 
@@ -483,7 +510,7 @@ npm run test          # run once
 npm run test:watch    # watch mode
 ```
 
-Covers `getMatchTimeStatus()` (open/locked/completed logic), `getMatchDayIST()` (the app-wide canonical "what day is this" helper, `src/lib/utils.ts`), the draft validation rules (`src/lib/draftRules.ts`), `PlayerCard`'s selected/disabled states, the scoring engine (`src/lib/scoring.ts` — dismissal parsing, bonus thresholds, the real-world name-mismatch fallback), and the leaderboard's IST-anchored Monday–Sunday week-boundary math (`src/lib/leaderboard.ts`) — including a test that pins `process.env.TZ` to a non-IST zone to prove week/day boundaries don't depend on the machine's local timezone. Add new test files as `*.test.ts(x)` next to the code they cover.
+Covers `getMatchTimeStatus()` (open/locked/completed logic), `getMatchDayIST()` (the app-wide canonical "what day is this" helper, `src/lib/utils.ts`), the draft validation rules (`src/lib/draftRules.ts`), `PlayerCard`'s selected/disabled states, the scoring engine (`src/lib/scoring.ts` — dismissal parsing incl. the `c sub (Name)` substitute-fielder case, bonus thresholds, the real-world name-mismatch fallback, and the strict-schema 502 behaviour), `withTimeout()`/`TimeoutError` (`src/lib/errors.ts`), the visibility policy inside `GET /api/leaderboard` and `GET /api/matches/[matchId]/squads` and the 502 path in `POST /api/finalize-match` (route-handler tests under `src/app/api/**/route.test.ts`, with the Admin SDK and auth mocked), and the leaderboard's IST-anchored Monday–Sunday week-boundary math (`src/lib/leaderboard.ts`) — including a test that pins `process.env.TZ` to a non-IST zone to prove week/day boundaries don't depend on the machine's local timezone. The whole runner is pinned to `TZ=Asia/Kolkata` (`vitest.config.ts`) so timezone-naive date literals behave identically on an IST machine and a UTC CI runner. Add new test files as `*.test.ts(x)` next to the code they cover.
 
 **End-to-end tests (Playwright + Firebase Emulator Suite)** — drives a real browser through actual signed-in flows (draft → lock → submit, the submission-visibility toggle across two separate simulated users). Runs against the emulator, never real Firestore data:
 
@@ -504,6 +531,13 @@ npm run test:rules   # boots the Firestore emulator for the duration of the run,
 
 `rules-tests/*.rules.test.ts` files run in a Node environment (`vitest.rules.config.ts`), separate from the jsdom-based `vitest.config.ts` used for `npm run test`.
 
+**Continuous integration (`.github/workflows/ci.yml`)** — runs on every push to `main` and every pull request:
+
+* `check` job — `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run build`.
+* `rules-tests` job — sets up JDK 21 (temurin) + `firebase-tools`, then `npm run test:rules`.
+
+`npm run test:e2e` is intentionally left out of CI (it needs the emulator, a dev server, and browser downloads). Vercel builds a preview deployment for every branch/PR separately.
+
 ## Deploying
 
 ```bash
@@ -520,8 +554,8 @@ Both require being logged in (`vercel login`, `firebase login`) — see each CLI
 
 * **Scoring accuracy depends on Cricbuzz's own data quality**, not just this codebase — see the fielding-name-mismatch and dot-ball caveats under Scoring Engine above. Treat computed scores as "very likely correct, not cryptographically guaranteed."
 * **No automatic trigger for scoring** — an admin has to click "Finalize Match" once Cricbuzz reports a match complete. Deliberate: this app has no cron/background job infrastructure by design, and reliably auto-detecting "truly finished, not just rain-delayed" was judged not worth the complexity versus a manual click.
-* Player `price` has no real pricing model (randomized at sync time).
-* `finalize-match` isn't covered by an E2E test (it calls the real RapidAPI, which automated tests shouldn't hit) — it's covered by unit tests on the underlying parsing/calculation logic (`src/lib/scoring.test.ts`) plus a real captured API response used as a test fixture, but the route handler itself is only manually verified.
+* Player `price` has no real pricing model (randomized at sync time) and is no longer shown anywhere in the UI — the field is retained but unused.
+* `finalize-match` still isn't covered by an *E2E* test (it calls the real RapidAPI, which automated tests shouldn't hit). It is covered by unit tests on the parsing/calculation logic (`src/lib/scoring.test.ts`) plus a captured real API response as a fixture, and by a route-handler test (`src/app/api/finalize-match/route.test.ts`) that mocks the scorecard fetch and asserts the 502 fail-loud path — but the full happy-path route behaviour against real Firestore is still only manually verified.
 
 ---
 
